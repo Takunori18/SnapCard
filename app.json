@@ -1,0 +1,75 @@
+{
+  "expo": {
+    "name": "SnapCard",
+    "slug": "snapcard",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.snapcard.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "SnapCardでは写真を撮影してカードを作成するためにカメラへのアクセスが必要です。",
+        "NSPhotoLibraryUsageDescription": "SnapCardでは撮影した写真を保存するためにフォトライブラリへのアクセスが必要です。",
+        "NSPhotoLibraryAddUsageDescription": "SnapCardでは撮影した写真を保存するためにフォトライブラリへの追加が必要です。"
+      },
+      "icon": "./assets/web-icon.png"
+    },
+    "android": {
+      "package": "com.snapcard.app",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES"
+      ],
+      "icon": "./assets/web-icon.png"
+    },
+    "web": {
+      "bundler": "metro",
+      "static": [
+        "./public"
+      ],
+      "shortName": "Cardy",
+      "meta": {
+        "apple": {
+          "mobileWebAppCapable": true,
+          "touchFullscreen": true,
+          "barStyle": "black",
+          "appTitle": "Cardy"
+        },
+        "mobile": {
+          "themeColor": "#0F1C2E"
+        }
+      },
+      "backgroundColor": "#ffffff",
+      "themeColor": "#0F1C2E",
+      "favicon": "./assets/web-icon.png",
+      "icon": "./assets/web-icon.png"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "SnapCardでは写真を撮影してカードを作成するためにカメラへのアクセスが必要です。"
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "SnapCardでは撮影した写真を保存するためにフォトライブラリへのアクセスが必要です。",
+          "savePhotosPermission": "SnapCardでは撮影した写真を保存するためにフォトライブラリへの追加が必要です。",
+          "isAccessMediaLocationEnabled": true
+        }
+      ]
+    ],
+    "icon": "./assets/web-icon.png"
+  }
+}
