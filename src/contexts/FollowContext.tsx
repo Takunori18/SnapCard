@@ -15,7 +15,7 @@ const FOLLOW_TABLE = 'follows';
 
 export const FollowProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { profile, user } = useAuth();
-  const followerId = profile?.id ?? user?.id ?? null;
+  const followerId = profile?.owner_id ?? user?.id ?? null;
   const [following, setFollowing] = useState<string[]>([]);
 
   const loadFollowing = useCallback(async () => {

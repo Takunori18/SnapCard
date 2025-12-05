@@ -8,6 +8,7 @@ const DmContext = createContext<DmContextType | undefined>(undefined);
 
 export const DmProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, profile } = useAuth();
+  const authUserId = profile?.owner_id ?? user?.id ?? null;
   const [conversations, setConversations] = useState<DmConversation[]>([]);
   const [currentConversation, setCurrentConversation] = useState<DmConversation | null>(null);
   const [messages, setMessages] = useState<DmMessage[]>([]);
@@ -17,7 +18,7 @@ export const DmProvider: React.FC<{ children: React.ReactNode }> = ({ children }
 
   // 会話一覧を取得
   const fetchConversations = useCallback(async () => {
-    if (!user?.id) return;
+    if (!authUserId) return;
 
     try {
       setLoading(true);
@@ -27,7 +28,7 @@ export const DmProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       const { data: participantData, error: participantError } = await supabase
         .from('dm_participants')
         .select('conversation_id')
-        .eq('user_id', user.id);
+        .eq('user_id', authUserId);
 
       if (participantError) throw participantError;
 
@@ -51,12 +52,12 @@ export const DmProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       const enrichedConversations = await Promise.all(
         (conversationsData || []).map(async (conv) => {
           // 相手ユーザーを取得
-          const { data: participants } = await supabase
-            .from('dm_participants')
-            .select('user_id')
-            .eq('conversation_id', conv.id)
-            .neq('user_id', user.id)
-            .single();
+            const { data: participants } = await supabase
+              .from('dm_participants')
+              .select('user_id')
+              .eq('conversation_id', conv.id)
+              .neq('user_id', authUserId)
+              .single();
 
           let otherUser = null;
           if (participants) {
@@ -84,7 +85,7 @@ export const DmProvider: React.FC<{ children: React.ReactNode }> = ({ children }
             .select('*', { count: 'exact', head: true })
             .eq('conversation_id', conv.id)
             .eq('is_read', false)
-            .neq('sender_id', user.id);
+            .neq('sender_id', authUserId);
 
           return {
             ...conv,
@@ -102,18 +103,21 @@ export const DmProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [authUserId]);
 
   // 会話を取得または新規作成
   const getOrCreateConversation = useCallback(async (otherUserId: string): Promise<string> => {
-    if (!user?.id) throw new Error('Not authenticated');
+    if (!authUserId) throw new Error('Not authenticated');
+    if (!otherUserId || otherUserId === authUserId) {
+      throw new Error('無効なユーザーです');
+    }
 
     try {
       // 既存の会話を検索
       const { data: existingParticipants } = await supabase
         .from('dm_participants')
         .select('conversation_id')
-        .eq('user_id', user.id);
+        .eq('user_id', authUserId);
 
       if (existingParticipants && existingParticipants.length > 0) {
         const conversationIds = existingParticipants.map(p => p.conversation_id);
@@ -140,12 +144,16 @@ export const DmProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       if (convError) throw convError;
 
       // 参加者を追加
+      const participantsPayload = [
+        { conversation_id: newConversation.id, user_id: authUserId },
+      ];
+      if (otherUserId && otherUserId !== authUserId) {
+        participantsPayload.push({ conversation_id: newConversation.id, user_id: otherUserId });
+      }
+
       const { error: participantsError } = await supabase
         .from('dm_participants')
-        .insert([
-          { conversation_id: newConversation.id, user_id: user.id },
-          { conversation_id: newConversation.id, user_id: otherUserId },
-        ]);
+        .insert(participantsPayload);
 
       if (participantsError) throw participantsError;
 
@@ -154,11 +162,11 @@ export const DmProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       console.error('Error getting/creating conversation:', err);
       throw err;
     }
-  }, [user?.id]);
+  }, [authUserId]);
 
   // メッセージを取得
   const fetchMessages = useCallback(async (conversationId: string) => {
-    if (!user?.id) return;
+    if (!authUserId) return;
 
     try {
       setLoading(true);
@@ -201,18 +209,18 @@ export const DmProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     } finally {
       setLoading(false);
     }
-  }, [user?.id, conversations]);
+  }, [authUserId, conversations]);
 
   // メッセージを送信
   const sendMessage = useCallback(async (conversationId: string, content: string) => {
-    if (!user?.id || !content.trim()) return;
+    if (!authUserId || !content.trim()) return;
 
     try {
       const { data, error } = await supabase
         .from('dm_messages')
         .insert({
           conversation_id: conversationId,
-          sender_id: user.id,
+          sender_id: authUserId,
           content: content.trim(),
         })
         .select()
@@ -220,16 +228,17 @@ export const DmProvider: React.FC<{ children: React.ReactNode }> = ({ children }
 
       if (error) throw error;
 
-      // ローカルのメッセージリストを更新
-      const { data: senderData } = await supabase
-        .from('profiles')
-        .select('id, display_name, avatar_url')
-        .eq('id', user.id)
-        .single();
+      const senderDisplayName =
+        profile?.display_name ?? profile?.username ?? user?.email ?? '自分';
+      const senderAvatar = profile?.avatar_url ?? null;
 
       const newMessage: DmMessage = {
         ...data,
-        sender: senderData,
+        sender: {
+          id: authUserId,
+          display_name: senderDisplayName,
+          avatar_url: senderAvatar,
+        },
       };
 
       setMessages(prev => [...prev, newMessage]);
@@ -238,23 +247,23 @@ export const DmProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       setError('メッセージの送信に失敗しました');
       throw err;
     }
-  }, [user?.id]);
+  }, [authUserId, profile, user?.email]);
 
   // メッセージを既読にする
   const markMessagesAsRead = useCallback(async (conversationId: string) => {
-    if (!user?.id) return;
+    if (!authUserId) return;
 
     try {
       await supabase
         .from('dm_messages')
         .update({ is_read: true })
         .eq('conversation_id', conversationId)
-        .neq('sender_id', user.id)
+        .neq('sender_id', authUserId)
         .eq('is_read', false);
     } catch (err) {
       console.error('Error marking messages as read:', err);
     }
-  }, [user?.id]);
+  }, [authUserId]);
 
   // リアルタイム購読
   const subscribeToConversation = useCallback((conversationId: string) => {
@@ -311,10 +320,10 @@ export const DmProvider: React.FC<{ children: React.ReactNode }> = ({ children }
 
   // 初期ロード時に会話一覧を取得
   useEffect(() => {
-    if (user?.id) {
+    if (authUserId) {
       fetchConversations();
     }
-  }, [user?.id, fetchConversations]);
+  }, [authUserId, fetchConversations]);
 
   // クリーンアップ
   useEffect(() => {

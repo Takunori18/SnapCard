@@ -175,15 +175,15 @@ export const SnapCardDetailModal: React.FC<SnapCardDetailModalProps> = ({
             </View>
           ) : null}
 
-          {item.tags.length > 0 && (
+          {item.tags?.length ? (
             <View style={styles.detailTagRow}>
-              {item.tags.map(tag => (
+              {(item.tags ?? []).map(tag => (
                 <Text key={tag} style={styles.detailTag}>
                   #{tag}
                 </Text>
               ))}
             </View>
-          )}
+          ) : null}
 
           {!infoExpanded && (
             <Text style={styles.expandHint}>タップしてカード情報を表示</Text>

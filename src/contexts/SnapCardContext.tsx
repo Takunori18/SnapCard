@@ -1,481 +1,391 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { SnapCard, CardMediaType } from '../types/card';
-import * as FileSystem from 'expo-file-system/legacy';
+import { SnapCard, CardMediaType, CardLocation } from '../types/card';
 import { useAuth } from './AuthContext';
-import { readUriAsArrayBuffer } from '../utils/file';
+import * as FileSystem from 'expo-file-system';
+import { decode } from 'base64-arraybuffer';
+import { Platform } from 'react-native';
+
+interface AddCardData {
+  imageUri?: string;
+  videoUri?: string;
+  thumbnailUrl?: string;
+  mediaType: CardMediaType;
+  title?: string;
+  caption?: string;
+  location?: string;
+  locationData?: CardLocation; // ★ 位置情報を追加
+  tags: string[];
+  userId: string;
+  isPublic?: boolean;
+}
 
 interface SnapCardContextType {
   cards: SnapCard[];
-  addCard: (card: Omit<SnapCard, 'id' | 'createdAt' | 'likesCount'>) => Promise<SnapCard>;
-  deleteCard: (id: string) => Promise<void>;
-  updateCard: (id: string, updates: Partial<SnapCard>) => Promise<void>;
-  reloadCards: () => Promise<void>;
   loading: boolean;
-  uploadImage: (uri: string) => Promise<string | null>;
-  uploadThumbnail: (uri: string) => Promise<string | null>;
+  addCard: (cardData: AddCardData) => Promise<SnapCard>;
+  updateCard: (cardId: string, updates: Partial<SnapCard>) => Promise<void>;
+  deleteCard: (cardId: string) => Promise<void>;
+  refreshCards: () => Promise<void>;
+  getCardById: (cardId: string) => SnapCard | undefined;
 }
 
 const SnapCardContext = createContext<SnapCardContextType | undefined>(undefined);
 
-const STORAGE_KEY_PREFIX = '@snapcard:cards';
-const getStorageKey = (identityId?: string | null) =>
-  identityId ? `${STORAGE_KEY_PREFIX}:${identityId}` : STORAGE_KEY_PREFIX;
-const TITLE_TAG_PREFIX = '__cardy_title__::';
-const PROFILE_TAG_PREFIX = '__cardy_profile__::';
-
-const sanitizeLegacyTags = (tags?: string[]) => {
-  if (!Array.isArray(tags)) {
-    return [];
-  }
-  return tags.filter(
-    tag =>
-      typeof tag === 'string' &&
-      !tag.startsWith(TITLE_TAG_PREFIX) &&
-      !tag.startsWith(PROFILE_TAG_PREFIX),
-  );
-};
-
-const extractLegacyMetadata = (
-  tags?: string[],
-  fallbackTitle?: string,
-  fallbackProfileId?: string,
-) => {
-  if (!Array.isArray(tags)) {
-    return { title: fallbackTitle, profileId: fallbackProfileId };
-  }
-  let derivedTitle: string | undefined = fallbackTitle;
-  let derivedProfileId: string | undefined = fallbackProfileId;
-  tags.forEach(tag => {
-    if (typeof tag !== 'string') {
-      return;
-    }
-    if (!derivedTitle && tag.startsWith(TITLE_TAG_PREFIX)) {
-      derivedTitle = tag.slice(TITLE_TAG_PREFIX.length);
-      return;
-    }
-    if (!derivedProfileId && tag.startsWith(PROFILE_TAG_PREFIX)) {
-      derivedProfileId = tag.slice(PROFILE_TAG_PREFIX.length);
-      return;
-    }
-  });
-  return { title: derivedTitle, profileId: derivedProfileId };
-};
-
-const isMissingColumnError = (error: any, column: string) => {
-  const lowerColumn = column.toLowerCase();
-  const message = String(error?.message ?? '').toLowerCase();
-  const details = String(error?.details ?? '').toLowerCase();
-  return (
-    message.includes(`column "${lowerColumn}`) ||
-    details.includes(`column "${lowerColumn}`) ||
-    message.includes(`'${lowerColumn}' column`)
-  );
-};
-
-export const SnapCardProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const SnapCardProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [cards, setCards] = useState<SnapCard[]>([]);
   const [loading, setLoading] = useState(true);
   const { user, profile } = useAuth();
-  const activeIdentity = profile?.id ?? user?.id ?? null;
-  const getIdentityId = () => profile?.id ?? user?.id ?? activeIdentity;
 
-  const loadCards = async (ownerRef: string, identityId: string | null) => {
-    setLoading(true);
+  // カード一覧取得
+  const fetchCards = useCallback(async () => {
     try {
-      const builder = supabase
+      setLoading(true);
+
+      const { data, error } = await supabase
         .from('cards')
         .select('*')
         .order('created_at', { ascending: false });
-      const query = builder.eq('user_id', identityId ?? ownerRef);
 
-      const { data: supabaseCards, error } = await query;
+      if (error) throw error;
 
-      if (error) {
-        console.error('Supabase読み込みエラー:', error?.message ?? error);
-        await loadFromLocalStorage(identityId);
-      } else if (supabaseCards) {
-        const cardsWithDates = supabaseCards.map((card: any) => {
-          const cleanTags = sanitizeLegacyTags(card.tags);
-          const legacy = extractLegacyMetadata(card.tags, card.title ?? undefined, card.user_id ?? undefined);
-          const derivedMediaType: CardMediaType =
-            (card.media_type as CardMediaType) ?? (card.video_url ? 'video' : 'image');
-          return {
-            id: card.id,
-            imageUri: card.image_url ?? undefined,
-            videoUri: card.video_url ?? undefined,
-            thumbnailUrl: card.thumbnail_url ?? undefined,
-            mediaType: derivedMediaType,
-            title: card.title ?? legacy.title ?? '',
-            caption: card.caption,
-            location: card.location,
-            tags: cleanTags,
-            likesCount: card.likes_count || 0,
-            createdAt: new Date(card.created_at),
-            userId: card.user_id ?? legacy.profileId ?? card.user_id,
-            isPublic: card.is_public ?? true,
-          };
-        });
-        setCards(cardsWithDates);
+      if (data) {
+        const mappedCards: SnapCard[] = data.map((card) => ({
+          id: card.id,
+          imageUri: card.image_url,
+          videoUri: card.video_url,
+          thumbnailUrl: card.thumbnail_url,
+          mediaType: card.media_type as CardMediaType,
+          title: card.title,
+          caption: card.caption,
+          location: card.location,
+          // ★ 位置情報をマッピング
+          locationData: card.latitude && card.longitude
+            ? {
+                latitude: card.latitude,
+                longitude: card.longitude,
+                placeId: card.place_id,
+                placeName: card.place_name,
+                placeAddress: card.place_address,
+              }
+            : undefined,
+          tags: card.tags || [],
+          likesCount: card.likes_count || 0,
+          createdAt: new Date(card.created_at),
+          userId: card.user_id,
+          isPublic: card.is_public ?? true,
+        }));
+
+        setCards(mappedCards);
       }
     } catch (error) {
-      console.error('カード読み込みエラー:', error);
-      await loadFromLocalStorage(identityId);
+      console.error('カード取得エラー:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadFromLocalStorage = async (identityId?: string | null) => {
-    try {
-      const key = getStorageKey(identityId);
-      let stored = await AsyncStorage.getItem(key);
-      if (!stored && identityId) {
-        stored = await AsyncStorage.getItem(STORAGE_KEY_PREFIX);
-      }
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        const cardsWithDates = parsed.map((card: any) => {
-          const cleanTags = sanitizeLegacyTags(card.tags);
-          const legacy = extractLegacyMetadata(card.tags, card.title, card.userId);
-          const derivedMediaType: CardMediaType =
-            card.mediaType === 'video'
-              ? 'video'
-              : card.mediaType === 'image'
-              ? 'image'
-              : card.videoUri
-              ? 'video'
-              : 'image';
-          return {
-            ...card,
-            imageUri: card.imageUri ?? undefined,
-            videoUri: card.videoUri ?? undefined,
-            thumbnailUrl: card.thumbnailUrl ?? undefined,
-            mediaType: derivedMediaType,
-            title: card.title ?? legacy.title ?? '',
-            tags: cleanTags,
-            userId: legacy.profileId ?? card.userId,
-            createdAt: new Date(card.createdAt),
-            isPublic: card.isPublic ?? true,
-          };
-        });
-        const filtered = identityId
-          ? cardsWithDates.filter(card => card.userId === identityId)
-          : cardsWithDates;
-        setCards(filtered);
-      }
-    } catch (error) {
-      console.error('ローカルストレージ読み込みエラー:', error);
-    }
-  };
-
-  const saveToLocalStorage = async (identityId: string | null, newCards: SnapCard[]) => {
-    if (!identityId) {
-      return;
-    }
-    const key = getStorageKey(identityId);
-    try {
-      await AsyncStorage.setItem(key, JSON.stringify(newCards));
-    } catch (error) {
-      console.error('ローカルストレージ保存エラー:', error);
-    }
-  };
-
+  // 初回ロード
   useEffect(() => {
-    const ownerRef = profile?.owner_id ?? user?.id ?? activeIdentity;
-    const identityId = profile?.id ?? user?.id ?? activeIdentity;
-    setCards([]);
-    if (!ownerRef) {
-      (async () => {
-        await loadFromLocalStorage(identityId);
-        setLoading(false);
-      })();
-      return;
-    }
+    void fetchCards();
+  }, [fetchCards]);
 
-    loadCards(ownerRef, identityId);
-  }, [activeIdentity, profile?.owner_id, user?.id, profile?.id]);
-
-  const uploadAsset = async (uri: string, extension: string, contentType: string, folder: string = 'cards'): Promise<string | null> => {
+  // カード追加
+  const addCard = async (cardData: AddCardData): Promise<SnapCard> => {
     try {
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}${extension}`;
-      const filePath = `${folder}/${fileName}`;
+      const {
+        imageUri,
+        videoUri,
+        thumbnailUrl,
+        mediaType,
+        title,
+        caption,
+        location,
+        locationData, // ★ 位置情報を受け取る
+        tags,
+        userId,
+        isPublic = true,
+      } = cardData;
 
-      if (uri.startsWith('file://')) {
-        const fileInfo = await FileSystem.getInfoAsync(uri);
-        if (!fileInfo.exists) {
-          throw new Error('ファイルが存在しません');
-        }
+      const isVideoCard = mediaType === 'video';
+      const profileIdentifier = profile?.id ?? userId;
+
+      // メディアファイルをSupabase Storageにアップロード
+      let imageUrl: string | null = null;
+      let videoUrl: string | null = null;
+
+      // 画像のアップロード
+      if (imageUri && !isVideoCard) {
+        imageUrl = await uploadFile(imageUri, 'image', profileIdentifier);
       }
 
-      const fileBuffer = await readUriAsArrayBuffer(uri);
-
-      const { error } = await supabase.storage
-        .from('card-images')
-        .upload(filePath, fileBuffer, {
-          contentType,
-          upsert: false,
-        });
-
-      if (error) {
-        console.error('アセットアップロードエラー:', error);
-        return null;
+      // 動画のアップロード
+      if (videoUri && isVideoCard) {
+        videoUrl = await uploadFile(videoUri, 'video', profileIdentifier);
       }
 
-      const { data: urlData } = supabase.storage
-        .from('card-images')
-        .getPublicUrl(filePath);
-
-      return urlData.publicUrl;
-    } catch (error) {
-      console.error('アセット処理エラー:', error);
-      return null;
-    }
-  };
-
-  const uploadImage = (uri: string) => uploadAsset(uri, '.jpg', 'image/jpeg', 'cards');
-  const uploadVideo = (uri: string) => uploadAsset(uri, '.mp4', 'video/mp4', 'cards');
-  const uploadThumbnail = (uri: string) => uploadAsset(uri, '.jpg', 'image/jpeg', 'thumbnails');
-
-  const reloadCards = async () => {
-    const ownerRef = profile?.owner_id ?? user?.id ?? activeIdentity;
-    const identityId = profile?.id ?? user?.id ?? activeIdentity;
-    if (ownerRef) {
-      await loadCards(ownerRef, identityId);
-    } else {
-      await loadFromLocalStorage(identityId);
-    }
-  };
-
-  const addCard = async (cardData: Omit<SnapCard, 'id' | 'createdAt' | 'likesCount'>) => {
-    const profileIdentifier = cardData.userId ?? activeIdentity;
-    const storageUserId = profile?.owner_id ?? user?.id ?? profileIdentifier;
-    if (!storageUserId || !profileIdentifier) {
-      throw new Error('カードの所有者情報が見つかりません');
-    }
-    const normalizedTitle = cardData.title?.trim() || '無題';
-    const isVideoCard = cardData.mediaType === 'video';
-
-    try {
-      let imageUrl = cardData.imageUri ?? null;
-      let videoUrl = cardData.videoUri ?? null;
-      let thumbnailUrl = cardData.thumbnailUrl ?? null;
-
-      if (imageUrl && (imageUrl.startsWith('file://') || imageUrl.startsWith('blob:'))) {
-        const uploadedUrl = await uploadImage(imageUrl);
-        if (uploadedUrl) {
-          imageUrl = uploadedUrl;
-        }
+      // サムネイルのアップロード（動画の場合）
+      if (thumbnailUrl && isVideoCard) {
+        imageUrl = await uploadFile(thumbnailUrl, 'thumbnail', profileIdentifier);
       }
 
-      if (isVideoCard) {
-        if (!videoUrl) {
-          throw new Error('動画のURIが見つかりません');
-        }
-        if (videoUrl.startsWith('file://') || videoUrl.startsWith('blob:')) {
-          const uploadedVideo = await uploadVideo(videoUrl);
-          if (uploadedVideo) {
-            videoUrl = uploadedVideo;
-          }
-        }
-      } else {
-        videoUrl = null;
-      }
+      // タグのクリーンアップ
+      const sourceTags = Array.isArray(tags) ? tags : [];
+      const cleanTags = sourceTags.map((tag) => tag.trim()).filter((tag) => tag.length > 0);
 
-      if (thumbnailUrl && (thumbnailUrl.startsWith('file://') || thumbnailUrl.startsWith('blob:'))) {
-        const uploadedThumbnail = await uploadThumbnail(thumbnailUrl);
-        if (uploadedThumbnail) {
-          thumbnailUrl = uploadedThumbnail;
-        }
-      }
-
-      const cleanTags = sanitizeLegacyTags(cardData.tags);
-
-      const cleanTags = sanitizeLegacyTags(cardData.tags);
-      const buildPayload = () => {
-        const timestamp = new Date().toISOString();
-        return {
-          image_url: imageUrl ?? videoUrl ?? null,
-          video_url: videoUrl ?? null,
-          thumbnail_url: thumbnailUrl ?? null,
-          media_type: isVideoCard ? 'video' : 'image',
-          caption: cardData.caption,
-          location: cardData.location,
-          tags: cleanTags,
-          user_id: profileIdentifier,
-          likes_count: 0,
-          is_public: cardData.isPublic ?? true,
-          created_at: timestamp,
-          updated_at: timestamp,
-          title: normalizedTitle,
-        };
+      // Supabaseにカードメタデータを保存
+      const timestamp = new Date().toISOString();
+      
+      const payload = {
+        image_url: imageUrl ?? videoUrl ?? null,
+        video_url: videoUrl ?? null,
+        thumbnail_url: thumbnailUrl ?? null,
+        media_type: isVideoCard ? 'video' : 'image',
+        title: title?.trim() || '無題',
+        caption: caption,
+        location: location,
+        // ★ 位置情報フィールドを追加
+        latitude: locationData?.latitude ?? null,
+        longitude: locationData?.longitude ?? null,
+        place_id: locationData?.placeId ?? null,
+        place_name: locationData?.placeName ?? null,
+        place_address: locationData?.placeAddress ?? null,
+        tags: cleanTags,
+        user_id: profileIdentifier,
+        likes_count: 0,
+        is_public: isPublic,
+        created_at: timestamp,
       };
 
-      const executeInsert = async (payload: any) =>
-        supabase.from('cards').insert([payload]).select().single();
+      const { data, error } = await supabase
+        .from('cards')
+        .insert(payload)
+        .select()
+        .single();
 
-      const { data, error } = await executeInsert(buildPayload());
+      if (error) throw error;
 
-      if (error) {
-        if (isMissingColumnError(error, 'title')) {
-          throw new Error(
-            'cards テーブルに title カラムが存在しません。Supabase で ALTER TABLE cards ADD COLUMN title text; を実行してください。',
-          );
-        }
-        if (isMissingColumnError(error, 'video_url') || isMissingColumnError(error, 'media_type')) {
-          throw new Error(
-            'cards テーブルに video_url / media_type カラムが存在しません。Supabase で ALTER TABLE cards ADD COLUMN video_url text, ADD COLUMN media_type text DEFAULT \'image\'; を実行してください。',
-          );
-        }
-        throw error;
-      }
-
-      const cleanResultTags = sanitizeLegacyTags(data.tags);
-      const legacy = extractLegacyMetadata(
-        data.tags,
-        data.title ?? normalizedTitle,
-        data.user_id ?? profileIdentifier,
-      );
-
-      const derivedMediaType: CardMediaType =
-        (data.media_type as CardMediaType) ?? (data.video_url ? 'video' : 'image');
+      // 新しいカードオブジェクトを作成
       const newCard: SnapCard = {
         id: data.id,
-        imageUri: data.image_url ?? undefined,
-        videoUri: data.video_url ?? undefined,
-        thumbnailUrl: data.thumbnail_url ?? undefined,
-        mediaType: derivedMediaType,
-        title: data.title ?? legacy.title ?? normalizedTitle,
-        caption: data.caption,
-        location: data.location,
-        tags: cleanResultTags,
-        likesCount: data.likes_count || 0,
-        createdAt: new Date(data.created_at),
-        userId: data.user_id ?? legacy.profileId ?? profileIdentifier,
-        isPublic: data.is_public ?? true,
+        imageUri: imageUrl ?? undefined,
+        videoUri: videoUrl ?? undefined,
+        thumbnailUrl: thumbnailUrl,
+        mediaType: mediaType,
+        title: title?.trim() || '無題',
+        caption: caption,
+        location: location,
+        // ★ 位置情報を含める
+        locationData: locationData,
+        tags: cleanTags,
+        likesCount: 0,
+        createdAt: new Date(timestamp),
+        userId: profileIdentifier,
+        isPublic: isPublic,
       };
 
-      const updatedCards = [newCard, ...cards];
-      setCards(updatedCards);
-      await saveToLocalStorage(getIdentityId(), updatedCards);
+      // ローカルステートを更新
+      setCards((prevCards) => [newCard, ...prevCards]);
+
       return newCard;
     } catch (error) {
       console.error('カード追加エラー:', error);
-
-      const newCard: SnapCard = {
-        ...cardData,
-        imageUri: imageUrl ?? cardData.imageUri,
-        videoUri: isVideoCard ? (videoUrl ?? cardData.videoUri) : undefined,
-        thumbnailUrl: thumbnailUrl ?? cardData.thumbnailUrl,
-        mediaType: isVideoCard ? 'video' : 'image',
-        title: normalizedTitle,
-        userId: profileIdentifier,
-        id: Date.now().toString(),
-        createdAt: new Date(),
-        likesCount: 0,
-        isPublic: cardData.isPublic ?? true,
-      };
-
-      const updatedCards = [newCard, ...cards];
-      setCards(updatedCards);
-      await saveToLocalStorage(getIdentityId(), updatedCards);
-      return newCard;
+      throw error;
     }
   };
 
-  const deleteCard = async (id: string) => {
+  // ファイルアップロード
+  const uploadFile = async (
+    uri: string,
+    type: 'image' | 'video' | 'thumbnail',
+    userId: string,
+  ): Promise<string> => {
     try {
-      const { error } = await supabase
-        .from('cards')
-        .delete()
-        .eq('id', id);
+      const fileExtension = uri.split('.').pop() || 'jpg';
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExtension}`;
+      const folder = type === 'video' ? 'videos' : 'images';
+      const filePath = `${userId}/${folder}/${fileName}`;
 
-      if (error) {
-        console.error('Supabase削除エラー:', error);
+      let fileData: string | ArrayBuffer;
+
+      if (Platform.OS === 'web') {
+        // Web環境: fetch経由でBlobを取得
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        fileData = await new Promise<ArrayBuffer>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            if (reader.result instanceof ArrayBuffer) {
+              resolve(reader.result);
+            } else {
+              reject(new Error('Failed to read file as ArrayBuffer'));
+            }
+          };
+          reader.onerror = reject;
+          reader.readAsArrayBuffer(blob);
+        });
+      } else {
+        // ネイティブ環境: FileSystem経由でbase64を取得
+        const base64 = await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        fileData = decode(base64);
       }
-    } catch (error) {
-      console.error('カード削除エラー:', error);
-    }
 
-    const identityId = getIdentityId();
-    setCards(prevCards => {
-      const updatedCards = prevCards.filter(card => card.id !== id);
-      void saveToLocalStorage(identityId, updatedCards);
-      return updatedCards;
-    });
+      const { data, error } = await supabase.storage
+        .from('media')
+        .upload(filePath, fileData, {
+          contentType: type === 'video' ? 'video/mp4' : 'image/jpeg',
+          upsert: false,
+        });
+
+      if (error) throw error;
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from('media').getPublicUrl(data.path);
+
+      return publicUrl;
+    } catch (error) {
+      console.error('ファイルアップロードエラー:', error);
+      throw error;
+    }
   };
 
-  const updateCard = async (id: string, updates: Partial<SnapCard>) => {
-    const trimmedTitle = updates.title?.trim();
-    const sanitizedTags =
-      updates.tags === undefined ? undefined : sanitizeLegacyTags(updates.tags);
-    const payload: Record<string, any> = {};
-
-    if (trimmedTitle !== undefined) {
-      payload.title = trimmedTitle;
-    } else if (updates.title !== undefined) {
-      payload.title = updates.title;
-    }
-    if (updates.caption !== undefined) {
-      payload.caption = updates.caption;
-    }
-    if (updates.location !== undefined) {
-      payload.location = updates.location;
-    }
-    if (sanitizedTags !== undefined) {
-      payload.tags = sanitizedTags;
-    }
-    if (updates.likesCount !== undefined) {
-      payload.likes_count = updates.likesCount;
-    }
-
+  // カード更新
+  const updateCard = async (cardId: string, updates: Partial<SnapCard>) => {
     try {
-      if (Object.keys(payload).length > 0) {
-        const { error } = await supabase
-          .from('cards')
-          .update(payload)
-          .eq('id', id);
+      // データベース用にキー名を変換
+      const dbUpdates: Record<string, unknown> = {};
 
-        if (error) {
-          console.error('Supabase更新エラー:', error);
+      if (updates.title !== undefined) dbUpdates.title = updates.title;
+      if (updates.caption !== undefined) dbUpdates.caption = updates.caption;
+      if (updates.location !== undefined) dbUpdates.location = updates.location;
+      if (updates.tags !== undefined) dbUpdates.tags = updates.tags;
+      if (updates.isPublic !== undefined) dbUpdates.is_public = updates.isPublic;
+      if (updates.likesCount !== undefined) dbUpdates.likes_count = updates.likesCount;
+
+      // ★ 位置情報の更新
+      if (updates.locationData !== undefined) {
+        if (updates.locationData === null) {
+          // 位置情報を削除
+          dbUpdates.latitude = null;
+          dbUpdates.longitude = null;
+          dbUpdates.place_id = null;
+          dbUpdates.place_name = null;
+          dbUpdates.place_address = null;
+        } else {
+          // 位置情報を更新
+          dbUpdates.latitude = updates.locationData.latitude;
+          dbUpdates.longitude = updates.locationData.longitude;
+          dbUpdates.place_id = updates.locationData.placeId ?? null;
+          dbUpdates.place_name = updates.locationData.placeName ?? null;
+          dbUpdates.place_address = updates.locationData.placeAddress ?? null;
         }
       }
+
+      const { error } = await supabase
+        .from('cards')
+        .update(dbUpdates)
+        .eq('id', cardId);
+
+      if (error) throw error;
+
+      // ローカルステートを更新
+      setCards((prevCards) =>
+        prevCards.map((card) =>
+          card.id === cardId ? { ...card, ...updates } : card,
+        ),
+      );
     } catch (error) {
       console.error('カード更新エラー:', error);
+      throw error;
     }
-
-    const updatedCards = cards.map(card =>
-      card.id === id
-        ? {
-            ...card,
-            ...updates,
-            ...(trimmedTitle !== undefined
-              ? { title: trimmedTitle }
-              : updates.title !== undefined
-              ? { title: updates.title }
-              : {}),
-            ...(sanitizedTags !== undefined ? { tags: sanitizedTags } : {}),
-          }
-        : card,
-    );
-    setCards(updatedCards);
-    await saveToLocalStorage(getIdentityId(), updatedCards);
   };
 
-  return (
-    <SnapCardContext.Provider 
-      value={{ cards, addCard, deleteCard, updateCard, reloadCards, loading, uploadImage, uploadThumbnail }}
-    >
-      {children}
-    </SnapCardContext.Provider>
-  );
+  // カード削除
+  const deleteCard = async (cardId: string) => {
+    try {
+      const card = cards.find((c) => c.id === cardId);
+      if (!card) throw new Error('カードが見つかりません');
+
+      // Supabase Storageからメディアファイルを削除
+      const profileIdentifier = profile?.id ?? user?.id;
+      if (!profileIdentifier) throw new Error('ユーザー情報が見つかりません');
+
+      if (card.imageUri) {
+        await deleteFile(card.imageUri, profileIdentifier);
+      }
+
+      if (card.videoUri) {
+        await deleteFile(card.videoUri, profileIdentifier);
+      }
+
+      if (card.thumbnailUrl && card.mediaType === 'video') {
+        await deleteFile(card.thumbnailUrl, profileIdentifier);
+      }
+
+      // データベースからカードを削除
+      const { error } = await supabase.from('cards').delete().eq('id', cardId);
+
+      if (error) throw error;
+
+      // ローカルステートを更新
+      setCards((prevCards) => prevCards.filter((card) => card.id !== cardId));
+    } catch (error) {
+      console.error('カード削除エラー:', error);
+      throw error;
+    }
+  };
+
+  // ファイル削除
+  const deleteFile = async (fileUrl: string, userId: string) => {
+    try {
+      // URLからファイルパスを抽出
+      const url = new URL(fileUrl);
+      const pathParts = url.pathname.split('/');
+      const bucketIndex = pathParts.findIndex((part) => part === 'media');
+      if (bucketIndex === -1) return;
+
+      const filePath = pathParts.slice(bucketIndex + 1).join('/');
+
+      const { error } = await supabase.storage.from('media').remove([filePath]);
+
+      if (error) {
+        console.warn('ファイル削除エラー:', error);
+      }
+    } catch (error) {
+      console.warn('ファイル削除処理エラー:', error);
+    }
+  };
+
+  // カード再取得
+  const refreshCards = async () => {
+    await fetchCards();
+  };
+
+  // IDでカードを取得
+  const getCardById = (cardId: string): SnapCard | undefined => {
+    return cards.find((card) => card.id === cardId);
+  };
+
+  const value = {
+    cards,
+    loading,
+    addCard,
+    updateCard,
+    deleteCard,
+    refreshCards,
+    getCardById,
+  };
+
+  return <SnapCardContext.Provider value={value}>{children}</SnapCardContext.Provider>;
 };
 
 export const useSnapCardContext = () => {
   const context = useContext(SnapCardContext);
-  if (!context) {
-    throw new Error('useSnapCardContext must be used within SnapCardProvider');
+  if (context === undefined) {
+    throw new Error('useSnapCardContext must be used within a SnapCardProvider');
   }
   return context;
 };
