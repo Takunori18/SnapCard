@@ -1,5 +1,15 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Modal, View, Text, TouchableOpacity, StyleSheet, Alert, TextInput, ActivityIndicator, ScrollView } from 'react-native';
+import {
+  Modal,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  TextInput,
+  ActivityIndicator,
+  ScrollView,
+} from 'react-native';
 import { useTheme, Theme } from '../../theme';
 import CardyImage from '../common/CardyImage';
 import { useAuth } from '../../contexts/AuthContext';
@@ -17,6 +27,10 @@ export const AccountSwitcherModal: React.FC<Props> = ({ visible, onClose }) => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { profiles, profile: activeProfile, switchProfile, deleteProfile } = useAuth();
+
+  // ✅ profiles が undefined でも必ず [] にする
+  const profileList = profiles ?? [];
+
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [loginModalVisible, setLoginModalVisible] = useState(false);
 
@@ -54,10 +68,11 @@ export const AccountSwitcherModal: React.FC<Props> = ({ visible, onClose }) => {
       <View style={styles.overlay}>
         <View style={styles.modal}>
           <Text style={styles.title}>アカウント</Text>
-          {profiles.length === 0 ? (
+
+          {profileList.length === 0 ? (
             <Text style={styles.emptyText}>追加されたアカウントはありません</Text>
           ) : (
-            profiles.map(account => (
+            profileList.map((account) => (
               <View key={account.id} style={styles.accountRow}>
                 {account.avatar_url ? (
                   <CardyImage
@@ -72,19 +87,31 @@ export const AccountSwitcherModal: React.FC<Props> = ({ visible, onClose }) => {
                     <Ionicons name="person" size={20} color={theme.colors.textSecondary} />
                   </View>
                 )}
+
                 <View style={styles.accountInfo}>
-                  <Text style={styles.accountName}>{account.display_name || account.username || 'ユーザー'}</Text>
+                  <Text style={styles.accountName}>
+                    {account.display_name || account.username || 'ユーザー'}
+                  </Text>
                   <Text style={styles.accountHandle}>@{account.username}</Text>
                 </View>
+
                 <View style={styles.accountActions}>
-                  <TouchableOpacity style={styles.switchButton} onPress={() => handleSwitch(account.id)}>
+                  <TouchableOpacity
+                    style={styles.switchButton}
+                    onPress={() => handleSwitch(account.id)}
+                  >
                     <Text style={styles.switchButtonText}>
                       {account.id === activeProfile?.id ? '現在' : '切り替え'}
                     </Text>
                   </TouchableOpacity>
-                  {profiles.length > 1 && account.id !== activeProfile?.id && (
+
+                  {profileList.length > 1 && account.id !== activeProfile?.id && (
                     <TouchableOpacity onPress={() => handleRemove(account.id)}>
-                      <Ionicons name="close-circle" size={20} color={theme.colors.textTertiary} />
+                      <Ionicons
+                        name="close-circle"
+                        size={20}
+                        color={theme.colors.textTertiary}
+                      />
                     </TouchableOpacity>
                   )}
                 </View>
@@ -92,7 +119,10 @@ export const AccountSwitcherModal: React.FC<Props> = ({ visible, onClose }) => {
             ))
           )}
 
-          <TouchableOpacity style={styles.loginButton} onPress={() => setLoginModalVisible(true)}>
+          <TouchableOpacity
+            style={styles.loginButton}
+            onPress={() => setLoginModalVisible(true)}
+          >
             <Ionicons name="log-in-outline" size={18} color={theme.colors.accent} />
             <Text style={styles.loginButtonText}>既存アカウントにログイン</Text>
           </TouchableOpacity>
@@ -107,6 +137,7 @@ export const AccountSwitcherModal: React.FC<Props> = ({ visible, onClose }) => {
           </TouchableOpacity>
         </View>
       </View>
+
       <AddAccountModal visible={addModalVisible} onClose={() => setAddModalVisible(false)} />
       <LoginAccountModal
         visible={loginModalVisible}
@@ -174,9 +205,7 @@ const AddAccountModal: React.FC<AddAccountModalProps> = ({ visible, onClose }) =
         console.error('アバターアップロードエラー:', error);
         return null;
       }
-      const { data } = supabase.storage
-        .from('card-images')
-        .getPublicUrl(filePath);
+      const { data } = supabase.storage.from('card-images').getPublicUrl(filePath);
       return data.publicUrl;
     } catch (error) {
       console.error('アバター処理エラー:', error);
@@ -221,7 +250,12 @@ const AddAccountModal: React.FC<AddAccountModalProps> = ({ visible, onClose }) =
           <ScrollView contentContainerStyle={styles.form}>
             <TouchableOpacity style={styles.avatarButton} onPress={pickImage}>
               {avatarUri ? (
-                <CardyImage source={{ uri: avatarUri }} style={styles.previewAvatar} contentFit="cover" alt="新規アバター" />
+                <CardyImage
+                  source={{ uri: avatarUri }}
+                  style={styles.previewAvatar}
+                  contentFit="cover"
+                  alt="新規アバター"
+                />
               ) : (
                 <View style={styles.avatarPlaceholder}>
                   <Ionicons name="camera" size={28} color={theme.colors.textSecondary} />
@@ -229,6 +263,7 @@ const AddAccountModal: React.FC<AddAccountModalProps> = ({ visible, onClose }) =
                 </View>
               )}
             </TouchableOpacity>
+
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>ユーザー名</Text>
               <TextInput
@@ -240,6 +275,7 @@ const AddAccountModal: React.FC<AddAccountModalProps> = ({ visible, onClose }) =
                 onChangeText={setUsername}
               />
             </View>
+
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>表示名</Text>
               <TextInput
@@ -251,6 +287,7 @@ const AddAccountModal: React.FC<AddAccountModalProps> = ({ visible, onClose }) =
               />
             </View>
           </ScrollView>
+
           <TouchableOpacity
             style={[styles.submitButton, loading && { opacity: 0.6 }]}
             onPress={handleSubmit}
@@ -262,6 +299,7 @@ const AddAccountModal: React.FC<AddAccountModalProps> = ({ visible, onClose }) =
               <Text style={styles.submitButtonText}>作成する</Text>
             )}
           </TouchableOpacity>
+
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
             <Text style={styles.closeButtonText}>閉じる</Text>
           </TouchableOpacity>
@@ -463,7 +501,6 @@ const createAddStyles = (theme: Theme) =>
     },
   });
 
-
 const createLoginStyles = (theme: Theme) =>
   StyleSheet.create({
     overlay: {
@@ -525,7 +562,11 @@ interface LoginAccountModalProps {
   onSuccess?: () => void;
 }
 
-const LoginAccountModal: React.FC<LoginAccountModalProps> = ({ visible, onClose, onSuccess }) => {
+const LoginAccountModal: React.FC<LoginAccountModalProps> = ({
+  visible,
+  onClose,
+  onSuccess,
+}) => {
   const theme = useTheme();
   const styles = useMemo(() => createLoginStyles(theme), [theme]);
   const { signIn, focusProfileByUsername, user } = useAuth();

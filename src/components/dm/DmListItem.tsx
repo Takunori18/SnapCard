@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme, Theme } from '../../theme'; // ★ 修正
+import { useTheme, Theme } from '../../theme';
 import { DmConversation } from '../../types/dm';
 import { format, isToday, isYesterday } from 'date-fns';
 import { ja } from 'date-fns/locale';
@@ -15,25 +15,30 @@ const DmListItem: React.FC<DmListItemProps> = ({ conversation, onPress }) => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    if (isToday(date)) {
-      return format(date, 'HH:mm');
-    } else if (isYesterday(date)) {
-      return '昨日';
-    } else {
-      return format(date, 'M/d', { locale: ja });
-    }
+  // --- Null-safe fallback ---
+  const otherUser = conversation.other_user ?? {
+    display_name: "不明なユーザー",
+    avatar_url: null,
   };
 
-  const hasUnread = conversation.unread_count && conversation.unread_count > 0;
+  const lastMessage = conversation.last_message ?? null;
+
+  const formatTimeSafe = (dateString?: string) => {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    if (isToday(date)) return format(date, 'HH:mm');
+    if (isYesterday(date)) return '昨日';
+    return format(date, 'M/d', { locale: ja });
+  };
+
+  const hasUnread = !!conversation.unread_count && conversation.unread_count > 0;
 
   return (
     <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.avatarContainer}>
-        {conversation.other_user.avatar_url ? (
+        {otherUser.avatar_url ? (
           <Image
-            source={{ uri: conversation.other_user.avatar_url }}
+            source={{ uri: otherUser.avatar_url }}
             style={styles.avatar}
           />
         ) : (
@@ -41,38 +46,41 @@ const DmListItem: React.FC<DmListItemProps> = ({ conversation, onPress }) => {
             <Ionicons name="person" size={24} color={theme.colors.textSecondary} />
           </View>
         )}
+
         {hasUnread && <View style={styles.unreadBadge} />}
       </View>
 
       <View style={styles.content}>
+        {/* Top Row */}
         <View style={styles.topRow}>
           <Text style={styles.name} numberOfLines={1}>
-            {conversation.other_user.display_name}
+            {otherUser.display_name ?? "不明なユーザー"}
           </Text>
-          {conversation.last_message && (
+
+          {lastMessage && (
             <Text style={styles.time}>
-              {formatTime(conversation.last_message.created_at)}
+              {formatTimeSafe(lastMessage.created_at)}
             </Text>
           )}
         </View>
 
-        {conversation.last_message && (
-          <View style={styles.bottomRow}>
-            <Text
-              style={[styles.lastMessage, hasUnread && styles.lastMessageUnread]}
-              numberOfLines={1}
-            >
-              {conversation.last_message.content}
-            </Text>
-            {hasUnread && (
-              <View style={styles.unreadCountBadge}>
-                <Text style={styles.unreadCountText}>
-                  {conversation.unread_count}
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
+        {/* Bottom Row (last message) */}
+        <View style={styles.bottomRow}>
+          <Text
+            style={[styles.lastMessage, hasUnread && styles.lastMessageUnread]}
+            numberOfLines={1}
+          >
+            {lastMessage?.content ?? ""}
+          </Text>
+
+          {hasUnread && (
+            <View style={styles.unreadCountBadge}>
+              <Text style={styles.unreadCountText}>
+                {conversation.unread_count}
+              </Text>
+            </View>
+          )}
+        </View>
       </View>
     </TouchableOpacity>
   );

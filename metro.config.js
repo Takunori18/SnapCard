@@ -8,6 +8,9 @@ config.resolver.extraNodeModules = {
   path: require.resolve('./src/shims/pathStub.js'),
 };
 
+// Skia用の設定追加
+config.resolver.sourceExts = [...(config.resolver.sourceExts || []), 'mjs'];
+
 // Windowsでnode:seaエラーを回避
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (moduleName.startsWith('node:')) {

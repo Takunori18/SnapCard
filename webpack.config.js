@@ -6,7 +6,10 @@ module.exports = async function (env, argv) {
     {
       ...env,
       babel: {
-        dangerouslyAddModulePathsToTranspile: ['@expo/vector-icons'],
+        dangerouslyAddModulePathsToTranspile: [
+          '@expo/vector-icons',
+          '@shopify/react-native-skia'
+        ],
       },
     },
     argv
@@ -26,6 +29,20 @@ module.exports = async function (env, argv) {
     ...config.resolve.alias,
     'expo-modules-core$': path.resolve(__dirname, 'src/web-shims/expo-modules-core-shim.js'),
   };
+
+  // WebAssemblyサポートを追加
+  config.experiments = {
+    ...config.experiments,
+    asyncWebAssembly: true,
+    syncWebAssembly: true,
+    layers: true,
+  };
+
+  // WASMファイルの読み込み設定
+  config.module.rules.push({
+    test: /\.wasm$/,
+    type: 'webassembly/async',
+  });
 
   return config;
 };
