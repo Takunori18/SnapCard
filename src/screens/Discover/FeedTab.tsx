@@ -7,12 +7,11 @@ import { useTheme, Theme } from '../../theme';
 import { supabase } from '../../lib/supabase';
 import { useFollowContext } from '../../contexts/FollowContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useDm } from '../../contexts/DmContext';
 import { SnapCard, CardMediaType } from '../../types/card';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
 import { RootStackParamList } from '../../navigation/types';
 import { isValidUUID } from '../../utils/uuid';
-
-const isMissingUserProfilesTable = (error: any) => error?.code === 'PGRST205';
 
 const resolveAvatarUrl = (value?: string | null) => {
   if (!value) {
@@ -44,6 +43,7 @@ export const FeedTab: React.FC = () => {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { following, isFollowing, toggleFollow } = useFollowContext();
   const { user, profile } = useAuth();
+  const { getOrCreateConversation } = useDm();
   const activeProfileId = profile?.id ?? user?.id ?? null;
 
   const filteredCards = useMemo(() => {
@@ -114,23 +114,11 @@ export const FeedTab: React.FC = () => {
           .from('user_profiles')
           .select('id, username, display_name, avatar_url')
           .in('id', userIds);
-        let rows = data ?? [];
         if (error) {
-          if (isMissingUserProfilesTable(error)) {
-            const fallback = await supabase
-              .from('profiles')
-              .select('id, username, display_name, avatar_url')
-              .in('id', userIds);
-            if (fallback.error) {
-              throw fallback.error;
-            }
-            rows = fallback.data ?? [];
-          } else {
-            throw error;
-          }
+          throw error;
         }
         const profiles =
-          rows.reduce((acc, profile) => {
+          (data ?? []).reduce((acc, profile) => {
             acc[profile.id] = {
               displayName: profile.display_name,
               username: profile.username,
@@ -176,28 +164,12 @@ export const FeedTab: React.FC = () => {
           .or(`username.ilike.${likePattern},display_name.ilike.${likePattern}`)
           .limit(10);
 
-        if (!error) {
-          appendRows(data);
-        } else if (!isMissingUserProfilesTable(error)) {
-          console.error('ユーザー検索エラー:', error);
+        if (error) {
+          throw error;
         }
+        appendRows(data);
       } catch (lookupError) {
         console.error('ユーザー検索エラー:', lookupError);
-      }
-
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('id, username, display_name, avatar_url')
-          .or(`username.ilike.${likePattern},display_name.ilike.${likePattern}`)
-          .limit(10);
-        if (!error) {
-          appendRows(data);
-        } else {
-          console.error('メインアカウント検索エラー:', error);
-        }
-      } catch (primaryError) {
-        console.error('メインアカウント検索エラー:', primaryError);
       }
 
       if (!isCancelled) {
@@ -225,9 +197,30 @@ export const FeedTab: React.FC = () => {
     await toggleFollow(targetId);
   };
 
-  const openProfile = (targetId?: string | null) => {
+  const handleStartConversation = async (profileId: string) => {
+    try {
+      const conversationId = await getOrCreateConversation(profileId);
+      navigation.navigate('DmThread', { conversationId });
+    } catch (error) {
+      console.error('DM開始エラー:', error);
+      Alert.alert(
+        'メッセージ',
+        error instanceof Error ? error.message : 'メッセージを開始できませんでした',
+      );
+    }
+  };
+
+  const openProfile = (
+    targetId?: string | null,
+    meta?: { displayName?: string | null; username?: string | null; avatarUrl?: string | null },
+  ) => {
     if (!targetId) return;
-    navigation.navigate('UserProfile', { profileId: targetId });
+    navigation.navigate('UserProfile', {
+      profileId: targetId,
+      displayName: meta?.displayName,
+      username: meta?.username,
+      avatarUrl: meta?.avatarUrl,
+    });
   };
 
   return (
@@ -259,12 +252,16 @@ export const FeedTab: React.FC = () => {
           ) : userResults.length === 0 ? (
             <Text style={styles.emptyUsersText}>一致するアカウントがありません</Text>
           ) : (
-            userResults.map(profile => (
+              userResults.map(profile => (
               <TouchableOpacity
-                key={profile.id}
-                style={styles.userRow}
-                onPress={() => openProfile(profile.id)}
-              >
+                 key={profile.id}
+                 style={styles.userRow}
+                 onPress={() => openProfile(profile.id, {
+                   displayName: profile.display_name,
+                   username: profile.username,
+                   avatarUrl: profile.avatar_url,
+                 })}
+               >
                 {profile.avatar_url ? (
                   <CardyImage
                     source={{ uri: profile.avatar_url, cacheKey: `feed-avatar-${profile.id}` }}
@@ -322,7 +319,7 @@ export const FeedTab: React.FC = () => {
                         style={styles.messageButton}
                         onPress={(event) => {
                           event.stopPropagation();
-                          Alert.alert('メッセージ', 'DM機能は準備中です');
+                          handleStartConversation(profile.id);
                         }}
                       >
                         <Ionicons name="chatbubble-ellipses-outline" size={16} color={theme.colors.textPrimary} />
@@ -346,13 +343,19 @@ export const FeedTab: React.FC = () => {
         <FlatList
           data={filteredCards}
           renderItem={({ item }) => (
-            <SnapCardItem
-              card={item}
-              onPress={() => console.log('Card pressed:', item.id)}
-              authorName={cardAuthors[item.userId]?.username || undefined}
-              authorAvatarUri={cardAuthors[item.userId]?.avatarUrl}
-              onAuthorPress={() => openProfile(item.userId)}
-            />
+              <SnapCardItem
+                card={item}
+                onPress={() => console.log('Card pressed:', item.id)}
+                authorName={cardAuthors[item.userId]?.username || undefined}
+                authorAvatarUri={cardAuthors[item.userId]?.avatarUrl}
+                onAuthorPress={() =>
+                  openProfile(item.userId, {
+                    displayName: cardAuthors[item.userId]?.displayName,
+                    username: cardAuthors[item.userId]?.username,
+                    avatarUrl: cardAuthors[item.userId]?.avatarUrl,
+                  })
+                }
+              />
           )}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.cardsList}

@@ -31,6 +31,7 @@ interface UserProfileContentProps {
   isFollowing?: boolean;
   onFollowToggle?: () => void;
   onEditProfile?: () => void;
+  showActions?: boolean;
 }
 
 export const UserProfileContent: React.FC<UserProfileContentProps> = ({
@@ -47,7 +48,9 @@ export const UserProfileContent: React.FC<UserProfileContentProps> = ({
   isFollowing = false,
   onFollowToggle,
   onEditProfile,
+  showActions = true,
 }) => {
+  const shouldShowActions = showActions ?? true;
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const navigation = useNavigation();
@@ -130,49 +133,52 @@ export const UserProfileContent: React.FC<UserProfileContentProps> = ({
       </View>
 
       {/* アクションボタン */}
-      <View style={styles.actions}>
-        {isOwnProfile ? (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.actionButtonFull]}
-            onPress={onEditProfile}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.actionButtonText}>プロフィールを編集</Text>
-          </TouchableOpacity>
-        ) : (
-          <>
+      {shouldShowActions && (
+        <View style={styles.actions}>
+          {isOwnProfile ? (
             <TouchableOpacity
-              style={[
-                styles.actionButton,
-                styles.actionButtonHalf,
-                isFollowing && styles.actionButtonSecondary,
-              ]}
-              onPress={onFollowToggle}
+              style={[styles.actionButton, styles.actionButtonFull]}
+              onPress={onEditProfile}
               activeOpacity={0.7}
             >
-              <Text
+              <Text style={styles.actionButtonText}>プロフィールを編集</Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              <TouchableOpacity
                 style={[
-                  styles.actionButtonText,
-                  isFollowing && styles.actionButtonTextSecondary,
+                  styles.actionButton,
+                  styles.actionButtonHalf,
+                  isFollowing && styles.actionButtonSecondary,
                 ]}
+                onPress={onFollowToggle}
+                activeOpacity={0.7}
+                disabled={!onFollowToggle}
               >
-                {isFollowing ? 'フォロー中' : 'フォロー'}
-              </Text>
-            </TouchableOpacity>
+                <Text
+                  style={[
+                    styles.actionButtonText,
+                    isFollowing && styles.actionButtonTextSecondary,
+                  ]}
+                >
+                  {isFollowing ? 'フォロー中' : 'フォロー'}
+                </Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.actionButton, styles.actionButtonHalf, styles.actionButtonSecondary]}
-              onPress={handleSendMessage}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="mail-outline" size={18} color={theme.colors.textPrimary} />
-              <Text style={[styles.actionButtonText, styles.actionButtonTextSecondary]}>
-                メッセージ
-              </Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.actionButtonHalf, styles.actionButtonSecondary]}
+                onPress={handleSendMessage}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="mail-outline" size={18} color={theme.colors.textPrimary} />
+                <Text style={[styles.actionButtonText, styles.actionButtonTextSecondary]}>
+                  メッセージ
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      )}
 
       {/* 投稿グリッド */}
       <View style={styles.gridContainer}>

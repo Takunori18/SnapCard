@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { supabase } from '../lib/supabase';
 import { SnapCard, CardMediaType, CardLocation } from '../types/card';
 import { useAuth } from './AuthContext';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { Platform } from 'react-native';
 
@@ -39,15 +39,25 @@ export const SnapCardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // カード一覧取得
   const fetchCards = useCallback(async () => {
+    const targetId = profile?.id ?? user?.id ?? null;
+    if (!targetId) {
+      setCards([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
 
       const { data, error } = await supabase
         .from('cards')
         .select('*')
+        .eq('user_id', targetId)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
       if (data) {
         const mappedCards: SnapCard[] = data.map((card) => ({
@@ -59,7 +69,6 @@ export const SnapCardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           title: card.title,
           caption: card.caption,
           location: card.location,
-          // ★ 位置情報をマッピング
           locationData: card.latitude && card.longitude
             ? {
                 latitude: card.latitude,
@@ -80,10 +89,11 @@ export const SnapCardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     } catch (error) {
       console.error('カード取得エラー:', error);
+      setCards([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [profile?.id, user?.id]);
 
   // 初回ロード
   useEffect(() => {
@@ -195,6 +205,11 @@ export const SnapCardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // ファイルアップロード
+  const BASE64_ENCODING: FileSystem.EncodingType =
+    FileSystem.EncodingType && FileSystem.EncodingType.Base64
+      ? FileSystem.EncodingType.Base64
+      : ('base64' as FileSystem.EncodingType);
+
   const uploadFile = async (
     uri: string,
     type: 'image' | 'video' | 'thumbnail',
@@ -227,13 +242,13 @@ export const SnapCardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       } else {
         // ネイティブ環境: FileSystem経由でbase64を取得
         const base64 = await FileSystem.readAsStringAsync(uri, {
-          encoding: FileSystem.EncodingType.Base64,
+          encoding: BASE64_ENCODING,
         });
         fileData = decode(base64);
       }
 
       const { data, error } = await supabase.storage
-        .from('media')
+        .from('card-images')
         .upload(filePath, fileData, {
           contentType: type === 'video' ? 'video/mp4' : 'image/jpeg',
           upsert: false,
@@ -243,7 +258,7 @@ export const SnapCardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       const {
         data: { publicUrl },
-      } = supabase.storage.from('media').getPublicUrl(data.path);
+      } = supabase.storage.from('card-images').getPublicUrl(data.path);
 
       return publicUrl;
     } catch (error) {
@@ -349,7 +364,7 @@ export const SnapCardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       const filePath = pathParts.slice(bucketIndex + 1).join('/');
 
-      const { error } = await supabase.storage.from('media').remove([filePath]);
+      const { error } = await supabase.storage.from('card-images').remove([filePath]);
 
       if (error) {
         console.warn('ファイル削除エラー:', error);

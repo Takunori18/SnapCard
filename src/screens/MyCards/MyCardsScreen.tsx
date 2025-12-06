@@ -50,14 +50,14 @@ export const MyCardsScreen: React.FC = () => {
           </Text>
         </TouchableOpacity>
 
-        {/* ★ アルバム（旧：バインダー） */}
+        {/* ★ バインダー */}
         <TouchableOpacity
           style={[styles.tab, activeTab === 'albums' && styles.tabActive]}
           onPress={() => setActiveTab('albums')}
           activeOpacity={0.7}
         >
           <Text style={[styles.tabText, activeTab === 'albums' && styles.tabTextActive]}>
-            アルバム
+            バインダー
           </Text>
         </TouchableOpacity>
 

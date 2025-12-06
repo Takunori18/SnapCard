@@ -1,333 +1,483 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { View, TextInput, Text, TouchableOpacity, StyleSheet } from 'react-native';
+// src/screens/StoryEditor/components/TextToolPanel.tsx
+import React, { useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+} from 'react-native';
 import Slider from '@react-native-community/slider';
-import { BottomSheet } from './BottomSheet';
-import { useStoryStore } from '../storyStore';
+import { Ionicons } from '@expo/vector-icons';
+import { BottomSheet } from '../../../components/editors/BottomSheet';
 import { useTheme, Theme } from '../../../theme';
+import { useEditorStore } from '../../../store/editorStore';
 
-type Props = {
+type TextToolPanelProps = {
   visible: boolean;
   onClose: () => void;
 };
 
-const FONT_OPTIONS = [
-  { label: 'Script', value: 'GreatVibes-Regular' },
-  { label: 'Grotesk', value: 'SpaceGrotesk-Regular' },
-  { label: 'Pacifico', value: 'Pacifico-Regular' },
+const FONTS = [
+  { label: 'Classic', value: 'System', preview: 'Aa' },
+  { label: 'Modern', value: 'SpaceGrotesk-Regular', preview: 'Aa' },
+  { label: 'Script', value: 'GreatVibes-Regular', preview: 'Aa' },
+  { label: 'Elegant', value: 'Pacifico-Regular', preview: 'Aa' },
+  { label: 'Bold', value: 'System-Bold', preview: 'Aa' },
 ];
 
-const COLOR_HUES = [0, 30, 60, 120, 180, 210, 260, 300];
+const COLORS = [
+  '#FFFFFF', '#000000', '#FF3B30', '#FF9500', '#FFCC00',
+  '#34C759', '#00C7BE', '#007AFF', '#5856D6', '#FF2D55',
+];
 
-export const TextToolPanel: React.FC<Props> = ({ visible, onClose }) => {
+const BACKGROUND_COLORS = [
+  'transparent', '#000000', '#FFFFFF', 'rgba(0,0,0,0.5)',
+  'rgba(255,255,255,0.5)', 'rgba(255,59,48,0.5)',
+];
+
+export const TextToolPanel: React.FC<TextToolPanelProps> = ({ visible, onClose }) => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const {
-    canvasSize,
-    texts,
-    selected,
-    addText,
-    updateText,
-    setSelected,
-  } = useStoryStore((state) => ({
-    canvasSize: state.canvasSize,
-    texts: state.texts,
-    selected: state.selected,
-    addText: state.addText,
-    updateText: state.updateText,
-    setSelected: state.setSelected,
-  }));
 
-  const selectedText = useMemo(
-    () => (selected.type === 'text' ? texts.find((item) => item.id === selected.id) ?? null : null),
-    [selected.id, selected.type, texts]
-  );
+  const { canvas, addElement, updateElement, selection, elements } = useEditorStore();
 
-  const [hueValue, setHueValue] = useState(0);
+  const [text, setText] = useState('');
+  const [fontSize, setFontSize] = useState(64);
+  const [fontFamily, setFontFamily] = useState('System');
+  const [color, setColor] = useState('#FFFFFF');
+  const [backgroundColor, setBackgroundColor] = useState<string>('transparent');
+  const [fontWeight, setFontWeight] = useState<'normal' | 'bold'>('normal');
+  const [fontStyle, setFontStyle] = useState<'normal' | 'italic'>('normal');
+  const [textAlign, setTextAlign] = useState<'left' | 'center' | 'right'>('center');
+  const [lineHeight, setLineHeight] = useState(1.2);
+  const [letterSpacing, setLetterSpacing] = useState(0);
 
-  useEffect(() => {
-    if (selectedText) {
-      const { h } = hexToHsl(selectedText.color);
-      setHueValue(Math.round(h));
+  const selectedElement = useMemo(() => {
+    if (selection.selectedIds.length === 1) {
+      const element = elements.find((el) => el.id === selection.selectedIds[0]);
+      if (element?.type === 'text') return element;
     }
-  }, [selectedText?.color]);
+    return null;
+  }, [selection.selectedIds, elements]);
 
   const handleAddText = () => {
-    const newId = `text-${Date.now()}`;
-    const newText = {
-      id: newId,
-      text: 'New caption',
-      x: canvasSize.width / 2,
-      y: canvasSize.height / 2,
-      fontSize: 64,
-      color: '#FFFFFF',
-      fontFamily: 'GreatVibes-Regular',
-      rotation: 0,
-    };
-    addText(newText);
-    setSelected({ type: 'text', id: newId });
+    if (!text.trim()) return;
+
+    const id = addElement({
+      type: 'text',
+      text: text.trim(),
+      fontSize,
+      fontFamily,
+      color,
+      fontWeight,
+      fontStyle,
+      textAlign,
+      lineHeight,
+      letterSpacing,
+      backgroundColor: backgroundColor === 'transparent' ? undefined : backgroundColor,
+      transform: {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        scale: 1,
+        rotation: 0,
+      },
+      opacity: 1,
+      name: 'テキスト',
+    });
+
+    setText('');
+    onClose();
   };
 
-  const handleHueChange = (value: number) => {
-    setHueValue(value);
-    if (selectedText) {
-      const hex = hslToHex(value, 0.8, 0.6);
-      updateText(selectedText.id, { color: hex });
+  const handleUpdateText = () => {
+    if (!selectedElement) return;
+
+    updateElement(selectedElement.id, {
+      text: text || selectedElement.text,
+      fontSize,
+      fontFamily,
+      color,
+      fontWeight,
+      fontStyle,
+      textAlign,
+      lineHeight,
+      letterSpacing,
+      backgroundColor: backgroundColor === 'transparent' ? undefined : backgroundColor,
+    });
+  };
+
+  // 選択されたテキストの値を反映
+  React.useEffect(() => {
+    if (selectedElement) {
+      setText(selectedElement.text);
+      setFontSize(selectedElement.fontSize);
+      setFontFamily(selectedElement.fontFamily);
+      setColor(selectedElement.color);
+      setBackgroundColor(selectedElement.backgroundColor || 'transparent');
+      setFontWeight(selectedElement.fontWeight);
+      setFontStyle(selectedElement.fontStyle);
+      setTextAlign(selectedElement.textAlign);
+      setLineHeight(selectedElement.lineHeight);
+      setLetterSpacing(selectedElement.letterSpacing);
     }
-  };
-
-  const renderContent = () => {
-    if (!selectedText) {
-      return (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>テキストを追加して選択すると編集できます。</Text>
-        </View>
-      );
-    }
-
-    return (
-      <>
-        <View style={styles.field}>
-          <Text style={styles.label}>テキスト内容</Text>
-          <TextInput
-            style={styles.input}
-            value={selectedText.text}
-            onChangeText={(value) => updateText(selectedText.id, { text: value })}
-            placeholder="テキストを入力"
-            placeholderTextColor={theme.colors.textTertiary}
-            multiline
-          />
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.label}>フォントサイズ {Math.round(selectedText.fontSize)}</Text>
-          <Slider
-            minimumValue={24}
-            maximumValue={140}
-            value={selectedText.fontSize}
-            step={1}
-            minimumTrackTintColor={theme.colors.accent}
-            maximumTrackTintColor={theme.colors.border}
-            onValueChange={(value) => updateText(selectedText.id, { fontSize: value })}
-          />
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.label}>カラー（Hue）</Text>
-          <Slider
-            minimumValue={0}
-            maximumValue={360}
-            step={1}
-            value={hueValue}
-            minimumTrackTintColor={theme.colors.accent}
-            maximumTrackTintColor={theme.colors.border}
-            onValueChange={handleHueChange}
-          />
-          <View
-            style={[
-              styles.colorPreview,
-              { backgroundColor: selectedText?.color ?? theme.colors.cardBackground },
-            ]}
-          />
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.label}>クイックカラー</Text>
-          <View style={styles.paletteRow}>
-            {COLOR_HUES.map((hue) => {
-              const color = hslToHex(hue, 0.8, 0.5);
-              return (
-                <TouchableOpacity
-                  key={hue}
-                  style={[styles.colorDot, { backgroundColor: color }]}
-                  onPress={() => {
-                    setHueValue(hue);
-                    updateText(selectedText.id, { color });
-                  }}
-                />
-              );
-            })}
-          </View>
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.label}>フォントファミリー</Text>
-          <View style={styles.fontRow}>
-            {FONT_OPTIONS.map((option) => {
-              const isActive = option.value === selectedText.fontFamily;
-              return (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[styles.fontButton, isActive && styles.fontButtonActive]}
-                  onPress={() => updateText(selectedText.id, { fontFamily: option.value })}
-                >
-                  <Text style={[styles.fontButtonLabel, isActive && styles.fontButtonLabelActive]}>
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-      </>
-    );
-  };
+  }, [selectedElement]);
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="テキスト" height={420}>
-      <TouchableOpacity style={styles.primaryButton} onPress={handleAddText}>
-        <Text style={styles.primaryButtonText}>＋ 新しいテキスト</Text>
-      </TouchableOpacity>
-      {renderContent()}
+    <BottomSheet visible={visible} onClose={onClose} title="テキスト" height={600}>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={styles.content}>
+          {/* テキスト入力 */}
+          <View style={styles.section}>
+            <Text style={styles.label}>テキスト内容</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="テキストを入力..."
+              placeholderTextColor={theme.colors.textTertiary}
+              value={text}
+              onChangeText={setText}
+              multiline
+              maxLength={200}
+            />
+            <Text style={styles.charCount}>{text.length}/200</Text>
+          </View>
+
+          {/* フォント選択 */}
+          <View style={styles.section}>
+            <Text style={styles.label}>フォント</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.fontRow}>
+                {FONTS.map((font) => (
+                  <TouchableOpacity
+                    key={font.value}
+                    style={[
+                      styles.fontButton,
+                      fontFamily === font.value && styles.fontButtonActive,
+                    ]}
+                    onPress={() => setFontFamily(font.value)}
+                  >
+                    <Text style={styles.fontPreview}>{font.preview}</Text>
+                    <Text style={styles.fontLabel}>{font.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+
+          {/* フォントサイズ */}
+          <View style={styles.section}>
+            <View style={styles.sliderHeader}>
+              <Text style={styles.label}>サイズ</Text>
+              <Text style={styles.sliderValue}>{Math.round(fontSize)}</Text>
+            </View>
+            <Slider
+              minimumValue={24}
+              maximumValue={140}
+              value={fontSize}
+              step={1}
+              minimumTrackTintColor={theme.colors.accent}
+              maximumTrackTintColor={theme.colors.border}
+              onValueChange={setFontSize}
+              onSlidingComplete={selectedElement ? handleUpdateText : undefined}
+            />
+          </View>
+
+          {/* テキストスタイル */}
+          <View style={styles.section}>
+            <Text style={styles.label}>スタイル</Text>
+            <View style={styles.styleRow}>
+              <TouchableOpacity
+                style={[styles.styleButton, fontWeight === 'bold' && styles.styleButtonActive]}
+                onPress={() => setFontWeight(fontWeight === 'bold' ? 'normal' : 'bold')}
+              >
+                <Ionicons
+                  name="text"
+                  size={20}
+                  color={fontWeight === 'bold' ? theme.colors.accent : theme.colors.textPrimary}
+                />
+                <Text style={styles.styleButtonLabel}>太字</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.styleButton, fontStyle === 'italic' && styles.styleButtonActive]}
+                onPress={() => setFontStyle(fontStyle === 'italic' ? 'normal' : 'italic')}
+              >
+                <Ionicons
+                  name="text"
+                  size={20}
+                  color={fontStyle === 'italic' ? theme.colors.accent : theme.colors.textPrimary}
+                />
+                <Text style={styles.styleButtonLabel}>斜体</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.styleButton, textAlign === 'left' && styles.styleButtonActive]}
+                onPress={() => setTextAlign('left')}
+              >
+                <Ionicons
+                  name="align-left"
+                  size={20}
+                  color={textAlign === 'left' ? theme.colors.accent : theme.colors.textPrimary}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.styleButton, textAlign === 'center' && styles.styleButtonActive]}
+                onPress={() => setTextAlign('center')}
+              >
+                <Ionicons
+                  name="align-center"
+                  size={20}
+                  color={textAlign === 'center' ? theme.colors.accent : theme.colors.textPrimary}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.styleButton, textAlign === 'right' && styles.styleButtonActive]}
+                onPress={() => setTextAlign('right')}
+              >
+                <Ionicons
+                  name="align-right"
+                  size={20}
+                  color={textAlign === 'right' ? theme.colors.accent : theme.colors.textPrimary}
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* 色選択 */}
+          <View style={styles.section}>
+            <Text style={styles.label}>テキストカラー</Text>
+            <View style={styles.colorRow}>
+              {COLORS.map((c) => (
+                <TouchableOpacity
+                  key={c}
+                  style={[
+                    styles.colorButton,
+                    { backgroundColor: c },
+                    color === c && styles.colorButtonActive,
+                  ]}
+                  onPress={() => setColor(c)}
+                />
+              ))}
+            </View>
+          </View>
+
+          {/* 背景色 */}
+          <View style={styles.section}>
+            <Text style={styles.label}>背景カラー</Text>
+            <View style={styles.colorRow}>
+              <TouchableOpacity
+                style={[
+                  styles.colorButton,
+                  styles.colorButtonTransparent,
+                  backgroundColor === 'transparent' && styles.colorButtonActive,
+                ]}
+                onPress={() => setBackgroundColor('transparent')}
+              >
+                <Ionicons name="close" size={16} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+              {BACKGROUND_COLORS.slice(1).map((c) => (
+                <TouchableOpacity
+                  key={c}
+                  style={[
+                    styles.colorButton,
+                    { backgroundColor: c },
+                    backgroundColor === c && styles.colorButtonActive,
+                  ]}
+                  onPress={() => setBackgroundColor(c)}
+                />
+              ))}
+            </View>
+          </View>
+
+          {/* 行間 */}
+          <View style={styles.section}>
+            <View style={styles.sliderHeader}>
+              <Text style={styles.label}>行間</Text>
+              <Text style={styles.sliderValue}>{lineHeight.toFixed(1)}</Text>
+            </View>
+            <Slider
+              minimumValue={0.8}
+              maximumValue={2}
+              value={lineHeight}
+              step={0.1}
+              minimumTrackTintColor={theme.colors.accent}
+              maximumTrackTintColor={theme.colors.border}
+              onValueChange={setLineHeight}
+              onSlidingComplete={selectedElement ? handleUpdateText : undefined}
+            />
+          </View>
+
+          {/* 文字間隔 */}
+          <View style={styles.section}>
+            <View style={styles.sliderHeader}>
+              <Text style={styles.label}>文字間隔</Text>
+              <Text style={styles.sliderValue}>{letterSpacing.toFixed(1)}</Text>
+            </View>
+            <Slider
+              minimumValue={-2}
+              maximumValue={10}
+              value={letterSpacing}
+              step={0.5}
+              minimumTrackTintColor={theme.colors.accent}
+              maximumTrackTintColor={theme.colors.border}
+              onValueChange={setLetterSpacing}
+              onSlidingComplete={selectedElement ? handleUpdateText : undefined}
+            />
+          </View>
+
+          {/* アクションボタン */}
+          <View style={styles.actions}>
+            {selectedElement ? (
+              <TouchableOpacity style={styles.primaryButton} onPress={handleUpdateText}>
+                <Text style={styles.primaryButtonText}>テキストを更新</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.primaryButton, !text.trim() && styles.primaryButtonDisabled]}
+                onPress={handleAddText}
+                disabled={!text.trim()}
+              >
+                <Text style={styles.primaryButtonText}>テキストを追加</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </ScrollView>
     </BottomSheet>
   );
 };
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
-    primaryButton: {
-      backgroundColor: theme.colors.accent,
-      borderRadius: theme.borderRadius.full,
-      paddingVertical: theme.spacing.sm,
-      alignItems: 'center',
+    content: {
+      gap: theme.spacing.lg,
     },
-    primaryButtonText: {
-      color: '#fff',
-      fontWeight: theme.fontWeight.bold,
-    },
-    field: {
-      gap: theme.spacing.xs,
+    section: {
+      gap: theme.spacing.sm,
     },
     label: {
-      color: theme.colors.textSecondary,
+      fontSize: theme.fontSize.sm,
       fontWeight: theme.fontWeight.semibold,
+      color: theme.colors.textPrimary,
     },
     input: {
       backgroundColor: theme.colors.cardBackground,
       borderRadius: theme.borderRadius.md,
+      padding: theme.spacing.md,
+      fontSize: theme.fontSize.md,
       color: theme.colors.textPrimary,
-      padding: theme.spacing.sm,
-      minHeight: 60,
+      minHeight: 100,
       textAlignVertical: 'top',
     },
-    colorPreview: {
-      height: 8,
-      backgroundColor: theme.colors.border,
-      borderRadius: 4,
-    },
-    paletteRow: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: theme.spacing.sm,
-    },
-    colorDot: {
-      width: 28,
-      height: 28,
-      borderRadius: 14,
+    charCount: {
+      fontSize: theme.fontSize.xs,
+      color: theme.colors.textTertiary,
+      textAlign: 'right',
     },
     fontRow: {
       flexDirection: 'row',
-      flexWrap: 'wrap',
       gap: theme.spacing.sm,
     },
     fontButton: {
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.xs,
-      borderRadius: theme.borderRadius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: 70,
+      height: 70,
+      borderRadius: theme.borderRadius.md,
       backgroundColor: theme.colors.cardBackground,
+      borderWidth: 2,
+      borderColor: 'transparent',
     },
     fontButtonActive: {
-      backgroundColor: theme.colors.accent + '22',
+      borderColor: theme.colors.accent,
+      backgroundColor: theme.colors.accent + '11',
     },
-    fontButtonLabel: {
-      color: theme.colors.textSecondary,
-    },
-    fontButtonLabelActive: {
-      color: theme.colors.accent,
+    fontPreview: {
+      fontSize: 24,
       fontWeight: theme.fontWeight.bold,
+      color: theme.colors.textPrimary,
     },
-    emptyState: {
-      paddingVertical: theme.spacing.lg,
+    fontLabel: {
+      fontSize: theme.fontSize.xs,
+      color: theme.colors.textSecondary,
+      marginTop: theme.spacing.xs,
+    },
+    sliderHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
       alignItems: 'center',
     },
-    emptyText: {
-      color: theme.colors.textSecondary,
+    sliderValue: {
+      fontSize: theme.fontSize.sm,
+      fontWeight: theme.fontWeight.medium,
+      color: theme.colors.accent,
+    },
+    styleRow: {
+      flexDirection: 'row',
+      gap: theme.spacing.sm,
+      flexWrap: 'wrap',
+    },
+    styleButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.xs,
+      paddingVertical: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.md,
+      borderRadius: theme.borderRadius.md,
+      backgroundColor: theme.colors.cardBackground,
+      borderWidth: 2,
+      borderColor: 'transparent',
+    },
+    styleButtonActive: {
+      borderColor: theme.colors.accent,
+      backgroundColor: theme.colors.accent + '11',
+    },
+    styleButtonLabel: {
+      fontSize: theme.fontSize.sm,
+      color: theme.colors.textPrimary,
+    },
+    colorRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: theme.spacing.sm,
+    },
+    colorButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      borderWidth: 3,
+      borderColor: 'transparent',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    colorButtonActive: {
+      borderColor: theme.colors.textPrimary,
+      transform: [{ scale: 1.1 }],
+    },
+    colorButtonTransparent: {
+      backgroundColor: theme.colors.cardBackground,
+      borderWidth: 2,
+      borderColor: theme.colors.border,
+    },
+    actions: {
+      paddingTop: theme.spacing.md,
+    },
+    primaryButton: {
+      backgroundColor: theme.colors.accent,
+      borderRadius: theme.borderRadius.full,
+      paddingVertical: theme.spacing.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    primaryButtonDisabled: {
+      opacity: 0.5,
+    },
+    primaryButtonText: {
+      color: theme.colors.secondary,
+      fontSize: theme.fontSize.md,
+      fontWeight: theme.fontWeight.bold,
     },
   });
-
-const hexToHsl = (hex: string) => {
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  if (hex.startsWith('#')) {
-    hex = hex.slice(1);
-  }
-  if (hex.length === 3) {
-    r = parseInt(hex[0] + hex[0], 16);
-    g = parseInt(hex[1] + hex[1], 16);
-    b = parseInt(hex[2] + hex[2], 16);
-  } else {
-    r = parseInt(hex.slice(0, 2), 16);
-    g = parseInt(hex.slice(2, 4), 16);
-    b = parseInt(hex.slice(4, 6), 16);
-  }
-  r /= 255;
-  g /= 255;
-  b /= 255;
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  let h = 0;
-  let s = 0;
-  const l = (max + min) / 2;
-  if (max !== min) {
-    const d = max - min;
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    switch (max) {
-      case r:
-        h = (g - b) / d + (g < b ? 6 : 0);
-        break;
-      case g:
-        h = (b - r) / d + 2;
-        break;
-      default:
-        h = (r - g) / d + 4;
-    }
-    h *= 60;
-  }
-  return { h, s, l };
-};
-
-const hslToHex = (h: number, s: number, l: number) => {
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const hp = h / 60;
-  const x = c * (1 - Math.abs((hp % 2) - 1));
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  if (hp >= 0 && hp < 1) {
-    r = c;
-    g = x;
-  } else if (hp >= 1 && hp < 2) {
-    r = x;
-    g = c;
-  } else if (hp >= 2 && hp < 3) {
-    g = c;
-    b = x;
-  } else if (hp >= 3 && hp < 4) {
-    g = x;
-    b = c;
-  } else if (hp >= 4 && hp < 5) {
-    r = x;
-    b = c;
-  } else {
-    r = c;
-    b = x;
-  }
-  const m = l - c / 2;
-  const toHex = (value: number) => {
-    const hex = Math.round((value + m) * 255)
-      .toString(16)
-      .padStart(2, '0');
-    return hex;
-  };
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-};

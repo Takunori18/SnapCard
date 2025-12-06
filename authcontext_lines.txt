@@ -1,0 +1,445 @@
+0001:import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+0002:import AsyncStorage from '@react-native-async-storage/async-storage';
+0003:import { Session, User } from '@supabase/supabase-js';
+0004:import { supabase } from '../lib/supabase';
+0005:
+0006:// ★ Profile型定義（位置情報とショップアカウント情報を追加）
+0007:export interface Profile {
+0008:  id: string;
+0009:  owner_id: string;
+0010:  username: string;
+0011:  display_name?: string;
+0012:  avatar_url?: string;
+0013:  bio?: string;
+0014:  isPrimary?: boolean;
+0015:  isPublic?: boolean;
+0016:  isShopAccount?: boolean;
+0017:  shopLatitude?: number;
+0018:  shopLongitude?: number;
+0019:  shopName?: string;
+0020:  shopAddress?: string;
+0021:}
+0022:
+0023:const ACTIVE_PROFILE_KEY = '@snapcard:active_profile';
+0024:
+0025:interface AuthContextType {
+0026:  user: User | null;
+0027:  profile: Profile | null;
+0028:  profiles: Profile[];
+0029:  session: Session | null;
+0030:  loading: boolean;
+0031:  signUp: (email: string, password: string, username: string, displayName?: string) => Promise<{ error: any }>;
+0032:  signIn: (email: string, password: string) => Promise<{ error: any }>;
+0033:  signOut: () => Promise<{ error: any }>;
+0034:  updateProfile: (updates: Partial<Profile>) => Promise<{ error: any }>;
+0035:  refreshProfile: () => Promise<void>;
+0036:  createProfile: (payload: {
+0037:    username: string;
+0038:    displayName: string;
+0039:    avatarUrl?: string;
+0040:  }) => Promise<{ error: any }>;
+0041:  switchProfile: (profileId: string) => Promise<void>;
+0042:  deleteProfile: (profileId: string) => Promise<{ error: any }>;
+0043:  focusProfileByUsername: (username: string) => Promise<boolean>;
+0044:}
+0045:
+0046:const AuthContext = createContext<AuthContextType | undefined>(undefined);
+0047:
+0048:export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+0049:  const [user, setUser] = useState<User | null>(null);
+0050:  const [profile, setProfile] = useState<Profile | null>(null);
+0051:  const [profiles, setProfiles] = useState<Profile[]>([]);
+0052:  const [session, setSession] = useState<Session | null>(null);
+0053:  const [loading, setLoading] = useState(true);
+0054:
+0055:  const normalizeProfileRow = (row: any): Profile => ({
+0056:    id: row.id,
+0057:    owner_id: row.owner_id,
+0058:    username: row.username,
+0059:    display_name: row.display_name ?? row.displayName,
+0060:    avatar_url: row.avatar_url ?? row.avatarUrl,
+0061:    bio: row.bio,
+0062:    isPrimary: row.is_primary ?? row.isPrimary ?? false,
+0063:    isPublic: row.is_public ?? row.isPublic ?? true,
+0064:    isShopAccount: row.is_shop_account ?? row.isShopAccount ?? false,
+0065:    shopLatitude: row.shop_latitude ?? row.shopLatitude,
+0066:    shopLongitude: row.shop_longitude ?? row.shopLongitude,
+0067:    shopName: row.shop_name ?? row.shopName,
+0068:    shopAddress: row.shop_address ?? row.shopAddress,
+0069:  });
+0070:
+0071:  const persistActiveProfile = useCallback(async (ownerId: string, profileId?: string | null) => {
+0072:    if (!ownerId) return;
+0073:    const key = `${ACTIVE_PROFILE_KEY}:${ownerId}`;
+0074:    try {
+0075:      if (profileId) {
+0076:        await AsyncStorage.setItem(key, profileId);
+0077:      } else {
+0078:        await AsyncStorage.removeItem(key);
+0079:      }
+0080:    } catch (error) {
+0081:      console.error('アクティブプロフィール保存エラー:', error);
+0082:    }
+0083:  }, []);
+0084:
+0085:  const getPersistedActiveProfileId = useCallback(async (ownerId: string) => {
+0086:    if (!ownerId) return null;
+0087:    const key = `${ACTIVE_PROFILE_KEY}:${ownerId}`;
+0088:    try {
+0089:      return await AsyncStorage.getItem(key);
+0090:    } catch (error) {
+0091:      console.error('アクティブプロフィール取得エラー:', error);
+0092:      return null;
+0093:    }
+0094:  }, []);
+0095:
+0096:  const setActiveProfile = useCallback(
+0097:    async (target: Profile | null) => {
+0098:      setProfile(target);
+0099:      if (target && user?.id) {
+0100:        await persistActiveProfile(user.id, target.id);
+0101:      } else if (user?.id) {
+0102:        await persistActiveProfile(user.id, null);
+0103:      }
+0104:    },
+0105:    [persistActiveProfile, user?.id],
+0106:  );
+0107:
+0108:  // セッション変更の監視
+0109:  useEffect(() => {
+0110:    // 初期セッション取得
+0111:    supabase.auth.getSession().then(({ data: { session } }) => {
+0112:      setSession(session);
+0113:      setUser(session?.user ?? null);
+0114:      if (session?.user) {
+0115:        void loadProfiles(session.user.id);
+0116:      } else {
+0117:        setLoading(false);
+0118:      }
+0119:    });
+0120:
+0121:    // セッション変更リスナー
+0122:    const {
+0123:      data: { subscription },
+0124:    } = supabase.auth.onAuthStateChange((_event, session) => {
+0125:      setSession(session);
+0126:      setUser(session?.user ?? null);
+0127:      if (session?.user) {
+0128:        void loadProfiles(session.user.id);
+0129:      } else {
+0130:        setProfile(null);
+0131:        setProfiles([]);
+0132:        setLoading(false);
+0133:      }
+0134:    });
+0135:
+0136:    return () => subscription.unsubscribe();
+0137:  }, [loadProfiles]);
+0138:
+0139:  const loadProfiles = useCallback(
+0140:    async (ownerId: string) => {
+0141:      if (!ownerId) {
+0142:        setProfiles([]);
+0143:        await setActiveProfile(null);
+0144:        return [];
+0145:      }
+0146:
+0147:      setLoading(true);
+0148:      try {
+0149:        const { data, error } = await supabase
+0150:          .from('user_profiles')
+0151:          .select('*')
+0152:          .eq('owner_id', ownerId)
+0153:          .order('created_at', { ascending: true });
+0154:
+0155:        if (error) {
+0156:          throw error;
+0157:        }
+0158:
+0159:        const normalized = (data ?? []).map(normalizeProfileRow);
+0160:        setProfiles(normalized);
+0161:        const storedId = await getPersistedActiveProfileId(ownerId);
+0162:        const fallback =
+0163:          normalized.find(item => item.id === storedId) ??
+0164:          normalized.find(item => item.isPrimary) ??
+0165:          normalized[0] ??
+0166:          null;
+0167:        await setActiveProfile(fallback);
+0168:        return normalized;
+0169:      } catch (error) {
+0170:        console.error('プロフィール読み込みエラー:', error);
+0171:        setProfiles([]);
+0172:        await setActiveProfile(null);
+0173:        return [];
+0174:      } finally {
+0175:        setLoading(false);
+0176:      }
+0177:    },
+0178:    [getPersistedActiveProfileId, setActiveProfile],
+0179:  );
+0180:
+0181:  // プロフィール更新
+0182:  const refreshProfile = async () => {
+0183:    if (user) {
+0184:      await loadProfiles(user.id);
+0185:    }
+0186:  };
+0187:
+0188:  // サインアップ
+0189:  const signUp = async (
+0190:    email: string,
+0191:    password: string,
+0192:    username: string,
+0193:    displayName?: string,
+0194:  ) => {
+0195:    try {
+0196:      const { data, error } = await supabase.auth.signUp({
+0197:        email,
+0198:        password,
+0199:        options: {
+0200:          data: {
+0201:            username,
+0202:            display_name: displayName ?? username,
+0203:          },
+0204:        },
+0205:      });
+0206:
+0207:      if (error) {
+0208:        return { error };
+0209:      }
+0210:
+0211:      if (data?.user) {
+0212:        const { error: profileError } = await supabase.from('user_profiles').insert({
+0213:          owner_id: data.user.id,
+0214:          username,
+0215:          display_name: displayName ?? username,
+0216:          is_primary: true,
+0217:          is_public: true,
+0218:          is_shop_account: false,
+0219:        });
+0220:
+0221:        if (profileError) {
+0222:          return { error: profileError };
+0223:        }
+0224:      }
+0225:
+0226:      return { error: null };
+0227:    } catch (error) {
+0228:      return { error };
+0229:    }
+0230:  };
+0231:
+0232:  // サインイン
+0233:  const signIn = async (email: string, password: string) => {
+0234:    try {
+0235:      const { error } = await supabase.auth.signInWithPassword({
+0236:        email,
+0237:        password,
+0238:      });
+0239:      return { error };
+0240:    } catch (error) {
+0241:      return { error };
+0242:    }
+0243:  };
+0244:
+0245:  // サインアウト
+0246:  const signOut = async () => {
+0247:    try {
+0248:      const { error } = await supabase.auth.signOut();
+0249:      setProfiles([]);
+0250:      setProfile(null);
+0251:      setSession(null);
+0252:      setUser(null);
+0253:      setLoading(false);
+0254:      return { error };
+0255:    } catch (error) {
+0256:      return { error };
+0257:    }
+0258:  };
+0259:
+0260:  // プロフィール更新
+0261:  const updateProfile = async (updates: Partial<Profile>) => {
+0262:    if (!profile) {
+0263:      return { error: new Error('プロフィールが見つかりません') };
+0264:    }
+0265:
+0266:    const dbUpdates: Record<string, unknown> = {};
+0267:    if (updates.username !== undefined) dbUpdates.username = updates.username;
+0268:    if (updates.display_name !== undefined) dbUpdates.display_name = updates.display_name;
+0269:    if (updates.avatar_url !== undefined) dbUpdates.avatar_url = updates.avatar_url;
+0270:    if (updates.bio !== undefined) dbUpdates.bio = updates.bio;
+0271:    if (updates.isPublic !== undefined) dbUpdates.is_public = updates.isPublic;
+0272:    if (updates.isShopAccount !== undefined) dbUpdates.is_shop_account = updates.isShopAccount;
+0273:    if (updates.shopLatitude !== undefined) dbUpdates.shop_latitude = updates.shopLatitude;
+0274:    if (updates.shopLongitude !== undefined) dbUpdates.shop_longitude = updates.shopLongitude;
+0275:    if (updates.shopName !== undefined) dbUpdates.shop_name = updates.shopName;
+0276:    if (updates.shopAddress !== undefined) dbUpdates.shop_address = updates.shopAddress;
+0277:
+0278:    try {
+0279:      const { error } = await supabase
+0280:        .from('user_profiles')
+0281:        .update(dbUpdates)
+0282:        .eq('id', profile.id);
+0283:
+0284:      if (error) {
+0285:        return { error };
+0286:      }
+0287:
+0288:      const updatedProfile = { ...profile, ...updates };
+0289:      setProfile(updatedProfile);
+0290:      setProfiles(prev =>
+0291:        prev.map(item => (item.id === updatedProfile.id ? updatedProfile : item)),
+0292:      );
+0293:      return { error: null };
+0294:    } catch (error) {
+0295:      return { error };
+0296:    }
+0297:  };
+0298:
+0299:  const createProfile = async ({
+0300:    username,
+0301:    displayName,
+0302:    avatarUrl,
+0303:  }: {
+0304:    username: string;
+0305:    displayName: string;
+0306:    avatarUrl?: string;
+0307:  }) => {
+0308:    if (!user) {
+0309:      return { error: new Error('ログインしていません') };
+0310:    }
+0311:    try {
+0312:      const payload = {
+0313:        owner_id: user.id,
+0314:        username,
+0315:        display_name: displayName,
+0316:        avatar_url: avatarUrl ?? null,
+0317:        is_primary: false,
+0318:        is_public: true,
+0319:        is_shop_account: false,
+0320:      };
+0321:      const { data, error } = await supabase
+0322:        .from('user_profiles')
+0323:        .insert(payload)
+0324:        .select()
+0325:        .single();
+0326:      if (error) {
+0327:        return { error };
+0328:      }
+0329:      await loadProfiles(user.id);
+0330:      if (data) {
+0331:        const normalized = normalizeProfileRow(data);
+0332:        await setActiveProfile(normalized);
+0333:      }
+0334:      return { error: null };
+0335:    } catch (error) {
+0336:      return { error };
+0337:    }
+0338:  };
+0339:
+0340:  const switchProfile = useCallback(
+0341:    async (profileId: string) => {
+0342:      const nextProfile = profiles.find(item => item.id === profileId);
+0343:      if (!nextProfile) return;
+0344:      await setActiveProfile(nextProfile);
+0345:    },
+0346:    [profiles, setActiveProfile],
+0347:  );
+0348:
+0349:  const deleteProfile = async (profileId: string) => {
+0350:    if (!user) {
+0351:      return { error: new Error('ログインしていません') };
+0352:    }
+0353:    const target = profiles.find(item => item.id === profileId);
+0354:    if (!target) {
+0355:      return { error: new Error('アカウントが見つかりません') };
+0356:    }
+0357:    if (target.isPrimary) {
+0358:      return { error: new Error('メインアカウントは削除できません') };
+0359:    }
+0360:    try {
+0361:      const { error } = await supabase
+0362:        .from('user_profiles')
+0363:        .delete()
+0364:        .eq('id', profileId)
+0365:        .eq('owner_id', user.id);
+0366:      if (error) {
+0367:        return { error };
+0368:      }
+0369:      await loadProfiles(user.id);
+0370:      return { error: null };
+0371:    } catch (error) {
+0372:      return { error };
+0373:    }
+0374:  };
+0375:
+0376:  const focusProfileByUsername = async (username: string) => {
+0377:    if (!user || !username.trim()) {
+0378:      return false;
+0379:    }
+0380:    const normalized = username.trim().toLowerCase();
+0381:    const localMatch = profiles.find(
+0382:      item => item.username?.toLowerCase() === normalized,
+0383:    );
+0384:    if (localMatch) {
+0385:      await setActiveProfile(localMatch);
+0386:      return true;
+0387:    }
+0388:    try {
+0389:      const { data, error } = await supabase
+0390:        .from('user_profiles')
+0391:        .select('*')
+0392:        .eq('owner_id', user.id)
+0393:        .ilike('username', normalized)
+0394:        .maybeSingle();
+0395:      if (error) {
+0396:        throw error;
+0397:      }
+0398:      if (!data) {
+0399:        return false;
+0400:      }
+0401:      const normalizedProfile = normalizeProfileRow(data);
+0402:      setProfiles(prev => {
+0403:        const exists = prev.some(item => item.id === normalizedProfile.id);
+0404:        if (exists) {
+0405:          return prev.map(item =>
+0406:            item.id === normalizedProfile.id ? normalizedProfile : item,
+0407:          );
+0408:        }
+0409:        return [...prev, normalizedProfile];
+0410:      });
+0411:      await setActiveProfile(normalizedProfile);
+0412:      return true;
+0413:    } catch (error) {
+0414:      console.error('サブアカウント切り替えエラー:', error);
+0415:      return false;
+0416:    }
+0417:  };
+0418:
+0419:  const value = {
+0420:    user,
+0421:    profile,
+0422:    profiles,
+0423:    session,
+0424:    loading,
+0425:    signUp,
+0426:    signIn,
+0427:    signOut,
+0428:    updateProfile,
+0429:    refreshProfile,
+0430:    createProfile,
+0431:    switchProfile,
+0432:    deleteProfile,
+0433:    focusProfileByUsername,
+0434:  };
+0435:
+0436:  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+0437:};
+0438:
+0439:export const useAuth = () => {
+0440:  const context = useContext(AuthContext);
+0441:  if (context === undefined) {
+0442:    throw new Error('useAuth must be used within an AuthProvider');
+0443:  }
+0444:  return context;
+0445:};

@@ -15,8 +15,6 @@ import { Story } from '../../contexts/StoryContext';
 import { useFollowContext } from '../../contexts/FollowContext';
 import { SnapCard, CardMediaType } from '../../types/card';
 
-const isMissingUserProfilesTable = (error: any) => error?.code === 'PGRST205';
-
 const STORY_GRADIENT = ['#5AC8FA', '#34C759'];
 
 export const FriendsTab: React.FC = () => {
@@ -69,23 +67,11 @@ export const FriendsTab: React.FC = () => {
           .select('id, username, display_name, avatar_url')
           .in('id', userIds);
 
-        let rows = data ?? [];
         if (error) {
-          if (isMissingUserProfilesTable(error)) {
-            const fallback = await supabase
-              .from('profiles')
-              .select('id, username, display_name, avatar_url')
-              .in('id', userIds);
-            if (fallback.error) {
-              throw fallback.error;
-            }
-            rows = fallback.data ?? [];
-          } else {
-            throw error;
-          }
+          throw error;
         }
-        if (rows.length) {
-          const profiles = rows.reduce((acc, profile) => {
+        if (data && data.length) {
+          const profiles = data.reduce((acc, profile) => {
             acc[profile.id] = profile;
             return acc;
           }, {} as Record<string, any>);
@@ -211,23 +197,11 @@ export const FriendsTab: React.FC = () => {
           .select('id, username, display_name, avatar_url')
           .in('id', userIds);
 
-        let rows = data ?? [];
         if (error) {
-          if (isMissingUserProfilesTable(error)) {
-            const fallback = await supabase
-              .from('profiles')
-              .select('id, username, display_name, avatar_url')
-              .in('id', userIds);
-            if (fallback.error) {
-              throw fallback.error;
-            }
-            rows = fallback.data ?? [];
-          } else {
-            throw error;
-          }
+          throw error;
         }
-        if (rows.length) {
-          const profiles = rows.reduce((acc, profile) => {
+        if (data && data.length) {
+          const profiles = data.reduce((acc, profile) => {
             acc[profile.id] = profile;
             return acc;
           }, {} as Record<string, any>);

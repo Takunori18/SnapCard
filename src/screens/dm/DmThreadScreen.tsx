@@ -27,6 +27,7 @@ const DmThreadScreen = () => {
   const styles = useMemo(() => createStyles(theme), [theme]); // ★ 追加
   const {
     messages,
+    conversations,
     currentConversation,
     loading,
     fetchMessages,
@@ -72,6 +73,10 @@ const DmThreadScreen = () => {
     }
   };
 
+  const activeConversation = currentConversation ?? conversations.find(c => c.id === conversationId);
+  const fallbackDisplayName =
+    messages.find(msg => msg.sender?.id && msg.sender.id !== activeConversation?.other_user?.id)?.sender?.display_name;
+
   if (loading && messages.length === 0) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -97,9 +102,12 @@ const DmThreadScreen = () => {
             <Ionicons name="chevron-back" size={28} color={theme.colors.textPrimary} />
           </TouchableOpacity>
           <View style={styles.headerInfo}>
-            <Text style={styles.headerTitle}>
-              {currentConversation?.other_user.display_name || '読み込み中...'}
-            </Text>
+          <Text style={styles.headerTitle}>
+            {activeConversation?.other_user.display_name ||
+              activeConversation?.other_user.username ||
+              fallbackDisplayName ||
+              '読み込み中...'}
+          </Text>
           </View>
           <View style={styles.headerRight} />
         </View>

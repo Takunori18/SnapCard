@@ -19,6 +19,7 @@ import { MapScreen } from '../screens/Map/MapScreen';
 import { AccountScreen } from '../screens/Account/AccountScreen';
 import { LoginScreen } from '../screens/Auth/LoginScreen';
 import { ProfileEditScreen } from '../screens/Account/ProfileEditScreen';
+import { AccountSettingsScreen } from '../screens/Account/AccountSettingsScreen'; // ★ 追加
 import { UserProfileScreen } from '../screens/Account/UserProfileScreen';
 import DmListScreen from '../screens/dm/DmListScreen';
 import DmThreadScreen from '../screens/dm/DmThreadScreen';
@@ -73,8 +74,72 @@ function BottomTabs() {
       shadowOpacity: 0.1,
       shadowRadius: 4,
     }),
-    [theme]
+    [theme],
   );
+
+  const tabScreens = [
+    {
+      name: 'MyCards',
+      component: MyCardsScreen,
+      options: {
+        tabBarLabel: 'マイカード',
+        tabBarIcon: ({ color, size }: { color: string; size: number }) => (
+          <Ionicons name="card-outline" size={size} color={color} />
+        ),
+      },
+    },
+    {
+      name: 'Home',
+      component: DiscoverScreen,
+      options: {
+        tabBarLabel: 'ホーム',
+        tabBarIcon: ({ color, size }: { color: string; size: number }) => (
+          <Ionicons name="home-outline" size={size} color={color} />
+        ),
+      },
+    },
+    {
+      name: 'Camera',
+      component: CameraScreen,
+      options: {
+        tabBarLabel: '',
+        tabBarIcon: () => null,
+        tabBarButton: (props: any) => <CustomCameraButton {...props} />,
+      },
+    },
+    {
+      name: 'Map',
+      component: MapScreen,
+      options: {
+        tabBarLabel: 'マップ',
+        tabBarIcon: ({ color, size }: { color: string; size: number }) => (
+          <Ionicons name="map-outline" size={size} color={color} />
+        ),
+      },
+    },
+    {
+      name: 'Account',
+      component: AccountScreen,
+      options: {
+        tabBarLabel: 'アカウント',
+        tabBarIcon: ({ color, size }: { color: string; size: number }) => (
+          <Ionicons name="person-outline" size={size} color={color} />
+        ),
+        tabBarButton: (props: any) => (
+          <TouchableOpacity
+            {...props}
+            onPress={props.onPress}
+            onLongPress={(event) => {
+              props.onLongPress?.(event);
+              setSwitcherVisible(true);
+            }}
+          >
+            {props.children}
+          </TouchableOpacity>
+        ),
+      },
+    },
+  ];
 
   return (
     <>
@@ -91,71 +156,14 @@ function BottomTabs() {
           },
         }}
       >
-        <Tab.Screen
-          name="MyCards"
-          component={MyCardsScreen}
-          options={{
-            tabBarLabel: 'マイカード',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="card-outline" size={size} color={color} />
-            ),
-          }}
-        />
-
-        <Tab.Screen
-          name="Home"
-          component={DiscoverScreen}
-          options={{
-            tabBarLabel: 'ホーム',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="home-outline" size={size} color={color} />
-            ),
-          }}
-        />
-
-        <Tab.Screen
-          name="Camera"
-          component={CameraScreen}
-          options={{
-            tabBarLabel: '',
-            tabBarIcon: () => null,
-            tabBarButton: (props) => <CustomCameraButton {...props} />,
-          }}
-        />
-
-        <Tab.Screen
-          name="Map"
-          component={MapScreen}
-          options={{
-            tabBarLabel: 'マップ',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="map-outline" size={size} color={color} />
-            ),
-          }}
-        />
-
-        <Tab.Screen
-          name="Account"
-          component={AccountScreen}
-          options={{
-            tabBarLabel: 'アカウント',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="person-outline" size={size} color={color} />
-            ),
-            tabBarButton: (props) => (
-              <TouchableOpacity
-                {...props}
-                onPress={props.onPress}
-                onLongPress={(event) => {
-                  props.onLongPress?.(event);
-                  setSwitcherVisible(true);
-                }}
-              >
-                {props.children}
-              </TouchableOpacity>
-            ),
-          }}
-        />
+        {tabScreens.map(screen => (
+          <Tab.Screen
+            key={screen.name}
+            name={screen.name}
+            component={screen.component}
+            options={screen.options}
+          />
+        ))}
       </Tab.Navigator>
 
       <AccountSwitcherModal
@@ -183,24 +191,26 @@ export function AppNavigator() {
     );
   }
 
+  const authenticatedScreens = [
+    <Stack.Screen key="MainTabs" name="MainTabs" component={BottomTabs} />,
+    <Stack.Screen key="CardEdit" name="CardEdit" component={CardEditScreen} />,
+    <Stack.Screen key="StoryEdit" name="StoryEdit" component={StoryEditScreen} />,
+    <Stack.Screen key="CardEditor" name="CardEditor" component={CardEditorScreen} />,
+    <Stack.Screen key="StoryEditor" name="StoryEditor" component={StoryEditorScreen} />,
+    <Stack.Screen key="ProfileEdit" name="ProfileEdit" component={ProfileEditScreen} />,
+    <Stack.Screen key="AccountSettings" name="AccountSettings" component={AccountSettingsScreen} />,
+    <Stack.Screen key="UserProfile" name="UserProfile" component={UserProfileScreen} />,
+    <Stack.Screen key="DmList" name="DmList" component={DmListScreen} />,
+    <Stack.Screen key="DmThread" name="DmThread" component={DmThreadScreen} />,
+  ];
+  const unauthenticatedScreens = [
+    <Stack.Screen key="Login" name="Login" component={LoginScreen} />,
+  ];
+
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {user ? (
-          <>
-            <Stack.Screen name="MainTabs" component={BottomTabs} />
-            <Stack.Screen name="CardEdit" component={CardEditScreen} />
-            <Stack.Screen name="StoryEdit" component={StoryEditScreen} />
-            <Stack.Screen name="CardEditor" component={CardEditorScreen} />
-            <Stack.Screen name="StoryEditor" component={StoryEditorScreen} />
-            <Stack.Screen name="ProfileEdit" component={ProfileEditScreen} />
-            <Stack.Screen name="UserProfile" component={UserProfileScreen} />
-            <Stack.Screen name="DmList" component={DmListScreen} />
-            <Stack.Screen name="DmThread" component={DmThreadScreen} />
-          </>
-        ) : (
-          <Stack.Screen name="Login" component={LoginScreen} />
-        )}
+        {user ? authenticatedScreens : unauthenticatedScreens}
       </Stack.Navigator>
     </NavigationContainer>
   );

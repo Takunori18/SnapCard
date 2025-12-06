@@ -1,7 +1,9 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import CardyImage from '../common/CardyImage';
 import { useAuth } from '../../contexts/AuthContext';
-import { useTheme, Theme } from '../../theme'; // ★ 修正
+import { useTheme, Theme } from '../../theme';
 import { DmMessage } from '../../types/dm';
 import { format } from 'date-fns';
 
@@ -14,37 +16,95 @@ const DmMessageBubble: React.FC<DmMessageBubbleProps> = ({ message }) => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const isOwnMessage = message.sender_id === user?.id;
+  const avatarUrl = message.sender?.avatar_url;
+
+  const renderAvatar = (styleOverride: any) => (
+    <View style={[styles.avatarBox, styleOverride]}>
+      {avatarUrl ? (
+        <CardyImage
+          source={{ uri: avatarUrl }}
+          style={styles.avatar}
+          contentFit="cover"
+          alt="ユーザーアバター"
+        />
+      ) : (
+        <View style={styles.avatarPlaceholder}>
+          <Ionicons name="person" size={20} color={theme.colors.textSecondary} />
+        </View>
+      )}
+    </View>
+  );
+
+  const bubbleContent = (
+    <View
+      style={[
+        styles.bubble,
+        isOwnMessage ? styles.ownBubble : styles.otherBubble,
+      ]}
+    >
+      <Text style={[styles.messageText, isOwnMessage && styles.ownMessageText]}>
+        {message.content}
+      </Text>
+    </View>
+  );
 
   return (
-    <View style={[styles.container, isOwnMessage ? styles.ownMessage : styles.otherMessage]}>
-      <View
+    <View style={[styles.row, isOwnMessage ? styles.rowOwn : styles.rowOther]}>
+      {!isOwnMessage && renderAvatar(styles.avatarBoxOther)}
+      {bubbleContent}
+      <Text
         style={[
-          styles.bubble,
-          isOwnMessage ? styles.ownBubble : styles.otherBubble,
+          styles.timestamp,
+          isOwnMessage ? styles.timestampOwn : styles.timestampOther,
         ]}
       >
-        <Text style={[styles.messageText, isOwnMessage && styles.ownMessageText]}>
-          {message.content}
-        </Text>
-        <Text style={[styles.timestamp, isOwnMessage && styles.ownTimestamp]}>
-          {format(new Date(message.created_at), 'HH:mm')}
-        </Text>
-      </View>
+        {format(new Date(message.created_at), 'HH:mm')}
+      </Text>
+      {isOwnMessage && renderAvatar(styles.avatarBoxOwn)}
     </View>
   );
 };
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
-    container: {
+    row: {
+      flexDirection: 'row',
       marginBottom: theme.spacing.sm,
       paddingHorizontal: theme.spacing.xs,
+      alignItems: 'center',
+      width: '100%',
+      gap: theme.spacing.xs,
     },
-    ownMessage: {
-      alignItems: 'flex-end',
+    rowOwn: {
+      justifyContent: 'flex-end',
     },
-    otherMessage: {
-      alignItems: 'flex-start',
+    rowOther: {
+      justifyContent: 'flex-start',
+    },
+    avatarBox: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      overflow: 'hidden',
+      backgroundColor: theme.colors.cardBackground,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    avatarBoxOwn: {
+      marginLeft: theme.spacing.xs,
+    },
+    avatarBoxOther: {
+      marginRight: theme.spacing.xs,
+    },
+    avatar: {
+      width: '100%',
+      height: '100%',
+    },
+    avatarPlaceholder: {
+      width: '100%',
+      height: '100%',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     bubble: {
       maxWidth: '75%',
@@ -71,11 +131,12 @@ const createStyles = (theme: Theme) =>
     timestamp: {
       fontSize: theme.fontSize.xs,
       color: theme.colors.textTertiary,
-      marginTop: 4,
-      alignSelf: 'flex-end',
     },
-    ownTimestamp: {
-      color: theme.colors.secondary + 'CC',
+    timestampOwn: {
+      color: `${theme.colors.secondary}CC`,
+    },
+    timestampOther: {
+      color: `${theme.colors.textSecondary}CC`,
     },
   });
 

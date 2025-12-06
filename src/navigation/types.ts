@@ -12,8 +12,14 @@ export type RootStackParamList = {
   CardEditor: undefined;
   StoryEditor: undefined;
   ProfileEdit: undefined;
+  AccountSettings: undefined; // ★ 追加
   Settings: undefined;
-  UserProfile: { profileId: string };
+  UserProfile: {
+    profileId: string;
+    displayName?: string;
+    username?: string;
+    avatarUrl?: string;
+  };
   DmList: undefined;
   DmThread: { conversationId: string };
 };

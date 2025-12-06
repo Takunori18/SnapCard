@@ -5,36 +5,33 @@ let skiaPromise: Promise<void> | null = null;
 let isLoaded = false;
 
 export function ensureSkiaWeb(): Promise<void> {
-  // SSR や node では実行しない
   if (typeof window === "undefined") {
     return Promise.resolve();
   }
 
-  // すでにロード済みなら Promise を返す
   if (isLoaded || (globalThis as any).CanvasKit) {
     isLoaded = true;
     return Promise.resolve();
   }
 
-  // 一度だけ実行する
   if (!skiaPromise) {
     skiaPromise = LoadSkiaWeb({
       locateFile: (file) => {
-        // CanvasKitのパスを複数試行
+        // 複数のCDNフォールバック
         const paths = [
           `/canvaskit/${file}`,
           `https://unpkg.com/canvaskit-wasm@latest/bin/${file}`,
+          `https://cdn.jsdelivr.net/npm/canvaskit-wasm@latest/bin/${file}`,
         ];
         return paths[0];
       },
     })
       .then(() => {
         isLoaded = true;
-        console.log('[Skia] Loaded successfully');
+        console.log('[Skia] ✅ CanvasKit loaded successfully');
       })
       .catch((err) => {
-        console.warn('[Skia] Failed to load, using fallback:', err);
-        // エラーでもPromiseをresolveする（アプリが動き続けるように）
+        console.error('[Skia] ❌ Failed to load CanvasKit:', err);
         isLoaded = false;
         return Promise.resolve();
       });
@@ -43,19 +40,21 @@ export function ensureSkiaWeb(): Promise<void> {
   return skiaPromise;
 }
 
-// 自動プレロード（重要）
+// 自動プレロード
 if (typeof window !== "undefined") {
   ensureSkiaWeb().catch(() => {
     console.warn('[Skia] Preload failed, will use fallback');
   });
 }
 
-// WebAssemblyのサポートチェック
 export function isWebAssemblySupported(): boolean {
   try {
     if (typeof WebAssembly === 'object' && 
         typeof WebAssembly.instantiate === 'function') {
-      return true;
+      const module = new WebAssembly.Module(
+        Uint8Array.of(0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00)
+      );
+      return module instanceof WebAssembly.Module;
     }
   } catch (e) {
     console.warn('[Skia] WebAssembly not supported:', e);

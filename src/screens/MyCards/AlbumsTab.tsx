@@ -8,6 +8,7 @@ import { Album } from '../../types/card';
 import { useSnapCardContext } from '../../contexts/SnapCardContext';
 import { SnapCard } from '../../types/card';
 import CardyImage from '../../components/common/CardyImage';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export const AlbumsTab: React.FC = () => {
   const { albums, loading, addAlbum, renameAlbum, deleteAlbum, removeCardFromAlbum, moveCardWithinAlbum } = useAlbums();
@@ -301,15 +302,8 @@ export const AlbumsTab: React.FC = () => {
         onRequestClose={handleCloseViewer}
       >
         <View style={styles.viewerOverlay}>
-          <View style={styles.viewerSheet}>
-            <View style={styles.viewerHoleColumn}>
-              {[...Array(3)].map((_, index) => (
-                <View key={index} style={styles.viewerHoleRow}>
-                  <View style={styles.viewerHole} />
-                </View>
-              ))}
-            </View>
-            <View style={styles.viewerPage}>
+    <View style={styles.viewerSheet}>
+      <View style={styles.viewerPage}>
               <View style={styles.viewerHeader}>
                 <TouchableOpacity onPress={handleCloseViewer} style={styles.viewerHeaderButton}>
                   <Ionicons name="close" size={22} color={theme.colors.textPrimary} />
@@ -374,73 +368,78 @@ export const AlbumsTab: React.FC = () => {
                   <Text style={styles.viewerEmptyText}>このバインダーにはまだカードがありません</Text>
                 </View>
               ) : (
-                <FlatList
-                  style={styles.viewerPager}
-                  data={viewerPages}
-                  keyExtractor={(_, idx) => `page-${idx}`}
-                  horizontal
-                  pagingEnabled
-                  showsHorizontalScrollIndicator={false}
-                  renderItem={({ item: slots, index: pageIndex }) => (
-                    <View style={[styles.viewerPageContent, { width: viewerPageWidth }]}>
-                      {[0, 1, 2].map((rowIndex) => (
-                        <View key={`row-${rowIndex}`} style={[styles.viewerRow, { gap: cardGap }]}>
-                          {[0, 1, 2].map((colIndex) => {
-                            const slotIndex = pageIndex * 9 + rowIndex * 3 + colIndex;
-                            const slot = slots[rowIndex * 3 + colIndex];
-                            if (!slot) {
-                              const emptyStyles = [styles.viewerCard, cardSizeStyle, styles.viewerCardPlaceholderEmpty] as const;
-                              if (actionMode === 'move' && pendingMove) {
-                                return (
-                                  <TouchableOpacity
-                                    key={`empty-${rowIndex}-${colIndex}`}
-                                    activeOpacity={0.7}
-                                    onPress={() => handleMoveTarget(slotIndex)}
-                                  >
-                                    <View style={emptyStyles} />
-                                  </TouchableOpacity>
-                                );
-                              }
-                              return (
-                                <View key={`empty-${rowIndex}-${colIndex}`} style={emptyStyles} />
-                              );
-                            }
-                            // ★ サムネイル優先表示
-                            const displayUri = slot.thumbnailUrl ?? slot.imageUri;
-                            return (
-                              <TouchableOpacity
-                                key={slot.id}
-                                activeOpacity={actionMode === 'none' ? 1 : 0.8}
-                                onPress={() => handleCardPress(slot, slotIndex)}
-                                style={[
-                                  styles.viewerCard,
-                                  cardSizeStyle,
-                                  slotIndex === pendingMove?.fromIndex && styles.viewerCardActive,
-                                ]}
-                              >
-                                {displayUri ? (
-                                  <CardyImage
-                                    source={{ uri: displayUri, cacheKey: `album-card-${slot.id}` }}
-                                    style={styles.viewerCardImage}
-                                    contentFit="cover"
-                                    alt={`バインダーカード ${slot.id}`}
-                                  />
-                                ) : (
-                                  <View style={styles.viewerCardPlaceholder}>
-                                    <Ionicons name="image" size={20} color={theme.colors.textSecondary} />
-                                  </View>
-                                )}
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                />
-              )}
+        <FlatList
+          style={styles.viewerPager}
+          data={viewerPages}
+          keyExtractor={(_, idx) => `page-${idx}`}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          renderItem={({ item: slots, index: pageIndex }) => (
+            <View style={[styles.viewerPageContent, { width: viewerPageWidth }]}>
+              {[0, 1, 2].map((rowIndex) => (
+                <View key={`row-${rowIndex}`} style={[styles.viewerRow, { gap: cardGap }]}>
+                  {[0, 1, 2].map((colIndex) => {
+                    const slotIndex = pageIndex * 9 + rowIndex * 3 + colIndex;
+                    const slot = slots[rowIndex * 3 + colIndex];
+                    if (!slot) {
+                      const emptyStyles = [styles.viewerCard, cardSizeStyle, styles.viewerCardPlaceholderEmpty] as const;
+                      if (actionMode === 'move' && pendingMove) {
+                        return (
+                          <TouchableOpacity
+                            key={`empty-${rowIndex}-${colIndex}`}
+                            activeOpacity={0.7}
+                            onPress={() => handleMoveTarget(slotIndex)}
+                          >
+                            <View style={emptyStyles} />
+                          </TouchableOpacity>
+                        );
+                      }
+                      return (
+                        <View key={`empty-${rowIndex}-${colIndex}`} style={emptyStyles} />
+                      );
+                    }
+                    const displayUri = slot.thumbnailUrl ?? slot.imageUri;
+                    return (
+                      <LinearGradient
+                        key={slot.id}
+                        colors={['#00B4FF', '#00FF99']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={[styles.viewerCardGradient, cardSizeStyle]}
+                      >
+                        <TouchableOpacity
+                          activeOpacity={actionMode === 'none' ? 1 : 0.8}
+                          onPress={() => handleCardPress(slot, slotIndex)}
+                          style={[
+                            styles.viewerCard,
+                            slotIndex === pendingMove?.fromIndex && styles.viewerCardActive,
+                          ]}
+                        >
+                          {displayUri ? (
+                            <CardyImage
+                              source={{ uri: displayUri, cacheKey: `album-card-${slot.id}` }}
+                              style={styles.viewerCardImage}
+                              contentFit="cover"
+                              alt={`バインダーカード ${slot.id}`}
+                            />
+                          ) : (
+                            <View style={styles.viewerCardPlaceholder}>
+                              <Ionicons name="image" size={20} color={theme.colors.textSecondary} />
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      </LinearGradient>
+                    );
+                  })}
+                </View>
+              ))}
             </View>
-          </View>
+          )}
+        />
+      )}
+    </View>
+  </View>
         </View>
       </Modal>
 
@@ -606,33 +605,23 @@ const createStyles = (theme: Theme) =>
       paddingVertical: theme.spacing.md,
     },
     viewerSheet: {
-      maxHeight: '85%',
-      margin: theme.spacing.md,
+      maxHeight: '90%',
+      marginHorizontal: theme.spacing.md,
+      marginVertical: theme.spacing.sm,
       borderRadius: theme.borderRadius.xl,
       backgroundColor: theme.colors.secondary,
       borderWidth: 1,
       borderColor: theme.colors.border,
       shadowColor: '#000',
-      shadowOpacity: 0.2,
-      shadowOffset: { width: 0, height: -3 },
-      shadowRadius: 12,
-      elevation: 10,
+      shadowOpacity: 0.25,
+      shadowOffset: { width: 0, height: 5 },
+      shadowRadius: 18,
+      elevation: 12,
       padding: theme.spacing.lg,
-      flexDirection: 'row',
-    },
-    viewerHoleColumn: {
-      width: 24,
-      justifyContent: 'space-evenly',
-      marginRight: theme.spacing.sm,
-    },
-    viewerHoleRow: {
+      alignSelf: 'center',
+      width: '95%',
       alignItems: 'center',
-    },
-    viewerHole: {
-      width: 12,
-      height: 12,
-      borderRadius: 6,
-      backgroundColor: theme.colors.border,
+      justifyContent: 'flex-start',
     },
     viewerHeader: {
       flexDirection: 'row',
@@ -669,6 +658,7 @@ const createStyles = (theme: Theme) =>
       marginTop: theme.spacing.sm,
     },
     viewerPage: {
+      width: '100%',
       flex: 1,
       backgroundColor: theme.colors.secondary,
       borderRadius: theme.borderRadius.lg,
@@ -676,6 +666,9 @@ const createStyles = (theme: Theme) =>
       borderColor: theme.colors.border,
       overflow: 'hidden',
       paddingBottom: theme.spacing.md,
+      paddingHorizontal: theme.spacing.md,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     viewerDivider: {
       height: 1,
@@ -721,10 +714,10 @@ const createStyles = (theme: Theme) =>
     },
     viewerPageContent: {
       flex: 1,
-      paddingHorizontal: theme.spacing.md,
-      paddingBottom: theme.spacing.md,
+      paddingBottom: theme.spacing.sm,
       justifyContent: 'center',
       gap: theme.spacing.md,
+      alignItems: 'center',
     },
     viewerRow: {
       flexDirection: 'row',
@@ -736,8 +729,12 @@ const createStyles = (theme: Theme) =>
       overflow: 'hidden',
       backgroundColor: theme.isDark ? theme.colors.cardBackground : '#fff',
       position: 'relative',
-      borderWidth: 1,
-      borderColor: theme.isDark ? theme.colors.border : '#f0e0d0',
+      borderWidth: 0,
+    },
+    viewerCardGradient: {
+      padding: 3,
+      borderRadius: theme.borderRadius.md,
+      marginBottom: theme.spacing.sm / 2,
     },
     viewerCardActive: {
       borderColor: theme.colors.accent,
