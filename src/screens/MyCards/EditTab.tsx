@@ -16,13 +16,13 @@ export const EditTab: React.FC = () => {
   const renderCardItem = ({ item }: { item: typeof cards[0] }) => (
     <TouchableOpacity
       style={styles.cardItem}
-      onPress={() =>
-        navigation.navigate('EditScreen' as never, {
-          cardId: item.id,
-          mode: 'edit',
-        } as never)
-      }
-    >
+        onPress={() =>
+          navigation.navigate('EditScreen', {
+            cardId: item.id,
+            mode: 'edit',
+          })
+        }
+      >
       <CardyImage source={{ uri: item.imageUri ?? '' }} style={styles.thumbnail} contentFit="cover" />
       <View style={styles.cardInfo}>
         <Text style={styles.cardTitle} numberOfLines={1}>

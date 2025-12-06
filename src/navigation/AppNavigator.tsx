@@ -15,6 +15,7 @@ import { CardEditScreen } from '../screens/Camera/CardEditScreen';
 import { StoryEditScreen } from '../screens/Camera/StoryEditScreen';
 import { CardEditorScreen } from '../screens/CardEditor/CardEditorScreen';
 import { StoryEditorScreen } from '../screens/StoryEditor/StoryEditorScreen';
+import { EditScreen } from '../screens/EditScreen/EditScreen';
 import { MapScreen } from '../screens/Map/MapScreen';
 import { AccountScreen } from '../screens/Account/AccountScreen';
 import { LoginScreen } from '../screens/Auth/LoginScreen';
@@ -196,6 +197,7 @@ export function AppNavigator() {
     <Stack.Screen key="CardEdit" name="CardEdit" component={CardEditScreen} />,
     <Stack.Screen key="StoryEdit" name="StoryEdit" component={StoryEditScreen} />,
     <Stack.Screen key="CardEditor" name="CardEditor" component={CardEditorScreen} />,
+    <Stack.Screen key="EditScreen" name="EditScreen" component={EditScreen} />,
     <Stack.Screen key="StoryEditor" name="StoryEditor" component={StoryEditorScreen} />,
     <Stack.Screen key="ProfileEdit" name="ProfileEdit" component={ProfileEditScreen} />,
     <Stack.Screen key="AccountSettings" name="AccountSettings" component={AccountSettingsScreen} />,

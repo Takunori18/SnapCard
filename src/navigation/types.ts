@@ -8,6 +8,11 @@ export type RootStackParamList = {
   CardDetail: { cardId: string };
   AlbumDetail: { albumId: string };
   CardEdit: { mediaUri: string; mediaType?: 'photo' | 'video' };
+  EditScreen: {
+    cardId?: string;
+    mode: 'create' | 'edit';
+    initialImageUri?: string;
+  };
   StoryEdit: undefined;
   CardEditor: undefined;
   StoryEditor: undefined;
