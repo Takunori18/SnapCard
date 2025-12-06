@@ -9,6 +9,8 @@ import {
   Dimensions,
   ScrollView,
   StatusBar,
+  ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +25,7 @@ import { CardToolbar } from './components/CardToolbar';
 import { exportToImage, uploadToSupabase, generateThumbnail } from '../../utils/exportUtils';
 import { useSnapCardContext } from '../../contexts/SnapCardContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSkiaWebReady } from '../../hooks/useSkiaWebReady';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -54,6 +57,8 @@ export const CardEditorScreen: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('edit');
   const [saving, setSaving] = useState(false);
   const [showGrid, setShowGrid] = useState(false);
+  const [location, setLocation] = useState('');
+  const { ready: skiaReady, error: skiaError } = useSkiaWebReady();
 
   const canUndo = undoStack.length > 0;
   const canRedo = redoStack.length > 0;
@@ -123,8 +128,10 @@ export const CardEditorScreen: React.FC = () => {
       // カードとして保存
       await addCard({
         imageUri: publicUrl,
+        thumbnailUrl,
         userId: profile.id,
         title: '新しいカード',
+        location: location.trim() || undefined,
         isPublic: true,
         mediaType: 'image',
       });
@@ -141,7 +148,7 @@ export const CardEditorScreen: React.FC = () => {
     } finally {
       setSaving(false);
     }
-  }, [user, profile, getSnapshot, addCard, navigation]);
+  }, [user, profile, getSnapshot, addCard, navigation, location]);
 
   const canvasSize = useMemo(() => {
     const maxSize = Math.min(SCREEN_WIDTH - 40, SCREEN_HEIGHT - 300);
@@ -230,14 +237,38 @@ export const CardEditorScreen: React.FC = () => {
         >
           {/* ツールバー */}
           <CardToolbar />
+          <View style={styles.locationSection}>
+            <Text style={styles.locationLabel}>位置情報</Text>
+            <View style={styles.locationInputRow}>
+              <Ionicons name="location-outline" size={20} color={theme.colors.textSecondary} />
+              <TextInput
+                style={styles.locationInput}
+                placeholder="カードの場所を入力"
+                placeholderTextColor={theme.colors.textTertiary}
+                value={location}
+                onChangeText={setLocation}
+                returnKeyType="done"
+              />
+            </View>
+          </View>
 
           {/* キャンバス */}
           <View style={styles.canvasWrapper}>
-            <SkiaCanvas
-              width={canvasSize.width}
-              height={canvasSize.height}
-              onElementSelect={(id) => console.log('Selected:', id)}
-            />
+            {!skiaReady ? (
+              <View style={styles.skiaPlaceholder}>
+                {skiaError ? (
+                  <Text style={styles.skiaError}>Skia の初期化に失敗しました。アプリを再起動してください。</Text>
+                ) : (
+                  <ActivityIndicator size="large" color={theme.colors.accent} />
+                )}
+              </View>
+            ) : (
+              <SkiaCanvas
+                width={canvasSize.width}
+                height={canvasSize.height}
+                onElementSelect={(id) => console.log('Selected:', id)}
+              />
+            )}
           </View>
 
           {/* サイドバー（モバイル用は下部に配置） */}
@@ -364,6 +395,47 @@ const createStyles = (theme: Theme) =>
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.1,
       shadowRadius: 8,
+    },
+    locationSection: {
+      width: '100%',
+      paddingHorizontal: theme.spacing.md,
+      paddingTop: theme.spacing.sm,
+      paddingBottom: theme.spacing.md,
+      gap: theme.spacing.xs,
+      alignItems: 'flex-start',
+    },
+    locationLabel: {
+      fontSize: theme.fontSize.sm,
+      fontWeight: theme.fontWeight.semibold,
+      color: theme.colors.textPrimary,
+    },
+    locationInputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      width: '100%',
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      backgroundColor: theme.colors.cardBackground,
+      borderRadius: theme.borderRadius.md,
+      gap: theme.spacing.sm,
+    },
+    locationInput: {
+      flex: 1,
+      fontSize: theme.fontSize.md,
+      color: theme.colors.textPrimary,
+      minHeight: 44,
+    },
+    skiaPlaceholder: {
+      width: '100%',
+      height: '100%',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: theme.spacing.lg,
+      backgroundColor: theme.colors.cardBackground,
+    },
+    skiaError: {
+      color: theme.colors.error,
+      textAlign: 'center',
     },
     layerPanelOverlay: {
       position: 'absolute',

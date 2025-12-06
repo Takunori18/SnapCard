@@ -73,67 +73,73 @@ export const DmProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       }
 
       // Step 3: 各会話の相手ユーザーと最新メッセージを取得
-      const enrichedConversations: DmConversation[] = [];
-
-      for (const conv of conversationsData) {
+      const enrichConversation = async (conv: DmConversation) => {
         try {
-          // 相手ユーザーを取得
-          const { data: otherParticipants, error: otherError } = await supabase
-            .from('dm_participants')
-            .select('user_id')
-            .eq('conversation_id', conv.id)
-          .neq('user_id', activeProfileId);
+          const [
+            otherParticipantsRes,
+            lastMessageRes,
+            unreadCountRes,
+          ] = await Promise.all([
+            supabase
+              .from('dm_participants')
+              .select('user_id')
+              .eq('conversation_id', conv.id)
+              .neq('user_id', activeProfileId),
+            supabase
+              .from('dm_messages')
+              .select('content, created_at, sender_id')
+              .eq('conversation_id', conv.id)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle(),
+            supabase
+              .from('dm_messages')
+              .select('*', { count: 'exact', head: true })
+              .eq('conversation_id', conv.id)
+              .eq('is_read', false)
+              .neq('sender_id', activeProfileId),
+          ]);
 
-          if (otherError) {
-            console.error('Error fetching other participants:', otherError);
-            continue;
-          }
-
+          const otherParticipants = otherParticipantsRes.data;
           if (!otherParticipants || otherParticipants.length === 0) {
-            console.log('No other participants for conversation:', conv.id);
-            continue;
+            return null;
           }
 
           const otherUserId = otherParticipants[0].user_id;
 
-          const { data: profileData, error: profileError } = await supabase
+          const profileDataResult = await supabase
             .from('user_profiles')
             .select('id, display_name, avatar_url, username')
             .eq('id', otherUserId)
             .single();
 
-          if (profileError || !profileData) {
-            console.error('Error fetching profile:', profileError);
-            continue;
+          if (profileDataResult.error || !profileDataResult.data) {
+            console.error('Error fetching profile:', profileDataResult.error);
+            return null;
           }
 
-          // 最新メッセージを取得
-          const { data: lastMessage } = await supabase
-            .from('dm_messages')
-            .select('content, created_at, sender_id')
-            .eq('conversation_id', conv.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+          const unreadCount =
+            unreadCountRes.count ?? unreadCountRes.data?.length ?? 0;
 
-          // 未読数を取得
-          const { count: unreadCount } = await supabase
-            .from('dm_messages')
-            .select('*', { count: 'exact', head: true })
-            .eq('conversation_id', conv.id)
-            .eq('is_read', false)
-            .neq('sender_id', activeProfileId);
-
-          enrichedConversations.push({
+          return {
             ...conv,
-            other_user: profileData,
-            last_message: lastMessage || undefined,
-            unread_count: unreadCount || 0,
-          });
+            other_user: profileDataResult.data,
+            last_message: lastMessageRes.data || undefined,
+            unread_count: unreadCount,
+          };
         } catch (err) {
           console.error('Error enriching conversation:', err);
+          return null;
         }
-      }
+      };
+
+      const enrichedConversationsResults = await Promise.all(
+        conversationsData.map(enrichConversation),
+      );
+
+      const enrichedConversations = enrichedConversationsResults.filter(
+        (conv): conv is DmConversation => Boolean(conv),
+      );
 
       console.log('Enriched conversations:', enrichedConversations);
       setConversations(enrichedConversations);
