@@ -441,12 +441,13 @@ const createStyles = (theme: Theme, gridGap: number, cardWidth: number, cardHeig
     },
     columnWrapper: {
       paddingHorizontal: gridGap,
-      justifyContent: 'space-between',
+      justifyContent: 'flex-start',
     },
     cardWrapper: {
       width: cardWidth,
       height: cardHeight,
       marginBottom: gridGap,
+      marginRight: gridGap,
     },
     centerContainer: {
       flex: 1,

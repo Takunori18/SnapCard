@@ -16,19 +16,14 @@ const DmMessageBubble: React.FC<DmMessageBubbleProps> = ({ message }) => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
-  const isOwnMessage = message.sender_id === user?.id;
+  const isOwn = message.sender_id === user?.id;
   const avatarUrl = message.sender?.avatar_url;
   const timeText = format(new Date(message.created_at), 'HH:mm');
 
-  const renderAvatar = (extraStyle?: any) => (
-    <View style={[styles.avatarBox, extraStyle]}>
+  const Avatar = (
+    <View style={styles.avatarBox}>
       {avatarUrl ? (
-        <CardyImage
-          source={{ uri: avatarUrl }}
-          style={styles.avatar}
-          contentFit="cover"
-          alt="ユーザーアバター"
-        />
+        <CardyImage source={{ uri: avatarUrl }} style={styles.avatar} />
       ) : (
         <View style={styles.avatarPlaceholder}>
           <Ionicons name="person" size={20} color={theme.colors.textSecondary} />
@@ -37,67 +32,37 @@ const DmMessageBubble: React.FC<DmMessageBubbleProps> = ({ message }) => {
     </View>
   );
 
-  const bubble = (
-    <View
-      style={[
-        styles.bubble,
-        isOwnMessage ? styles.ownBubble : styles.otherBubble,
-      ]}
-    >
-      <Text
-        style={[
-          styles.messageText,
-          isOwnMessage && styles.ownMessageText,
-        ]}
-      >
+  const Bubble = (
+    <View style={[styles.bubble, isOwn ? styles.ownBubble : styles.otherBubble]}>
+      <Text style={[styles.text, isOwn && styles.ownText]}>
         {message.content}
       </Text>
     </View>
   );
 
-  // 自分のメッセージ（右側）
-  if (isOwnMessage) {
-    return (
-      <View style={[styles.row, styles.rowOwn]}>
-        {/* 左側にスペーサーを入れて、全体を右に寄せやすくする */}
-        <View style={styles.rowSpacer} />
-
-        {/* バブル＋時刻ブロック（右寄せ） */}
-        <View style={styles.messageBlockOwn}>
-          <View style={styles.bubbleTimeRowOwn}>
-            {/* 時刻 → バブル の順にして、バブルを一番右に */}
-            <Text style={[styles.timestamp, styles.timestampOwn]}>
-              {timeText}
-            </Text>
-            {bubble}
-          </View>
-        </View>
-
-        {/* 一番右にアバター */}
-        {renderAvatar(styles.avatarBoxOwn)}
-      </View>
-    );
-  }
-
-  // 相手のメッセージ（左側）
   return (
-    <View style={[styles.row, styles.rowOther]}>
-      {/* 左にアバター */}
-      {renderAvatar(styles.avatarBoxOther)}
+    <View style={[styles.row, isOwn ? styles.rowOwn : styles.rowOther]}>
+      {/* 相手側：アバター → バブル → 時刻 */}
+      {!isOwn && Avatar}
 
-      {/* バブル＋時刻ブロック（左寄せ） */}
-      <View style={styles.messageBlockOther}>
-        <View style={styles.bubbleTimeRowOther}>
-          {/* バブル → 時刻 の順で左側配置 */}
-          {bubble}
-          <Text style={[styles.timestamp, styles.timestampOther]}>
-            {timeText}
-          </Text>
-        </View>
+      <View style={styles.bubbleTime}>
+        {isOwn ? (
+          // 自分側：時刻 → バブル
+          <>
+            <Text style={[styles.time, styles.timeOwn]}>{timeText}</Text>
+            {Bubble}
+          </>
+        ) : (
+          // 相手側：バブル → 時刻
+          <>
+            {Bubble}
+            <Text style={[styles.time, styles.timeOther]}>{timeText}</Text>
+          </>
+        )}
       </View>
 
-      {/* 右側はスペーサーで埋める */}
-      <View style={styles.rowSpacer} />
+      {/* 自分側：バブル → 時刻 → アバター */}
+      {isOwn && Avatar}
     </View>
   );
 };
@@ -106,36 +71,24 @@ const createStyles = (theme: Theme) =>
   StyleSheet.create({
     row: {
       flexDirection: 'row',
-      alignItems: 'flex-end', // ★ バブルと時刻の下端揃え
+      alignItems: 'flex-end', // ★ 下端揃え
       marginBottom: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.xs,
       width: '100%',
+      paddingHorizontal: theme.spacing.sm,
     },
     rowOwn: {
-      justifyContent: 'flex-end', // ★ 右側に寄せる
+      justifyContent: 'flex-end', // ★ 右寄せ
     },
     rowOther: {
-      justifyContent: 'flex-start', // ★ 左側に寄せる
-    },
-    rowSpacer: {
-      flex: 1,
+      justifyContent: 'flex-start', // ★ 左寄せ
     },
 
-    // --- アバター周り ---
     avatarBox: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
+      width: 34,
+      height: 34,
+      borderRadius: 17,
       overflow: 'hidden',
-      backgroundColor: theme.colors.cardBackground,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    avatarBoxOwn: {
-      marginLeft: theme.spacing.xs,
-    },
-    avatarBoxOther: {
-      marginRight: theme.spacing.xs,
+      marginHorizontal: 6,
     },
     avatar: {
       width: '100%',
@@ -146,14 +99,22 @@ const createStyles = (theme: Theme) =>
       height: '100%',
       alignItems: 'center',
       justifyContent: 'center',
+      backgroundColor: theme.colors.cardBackground,
     },
 
-    // --- バブル本体 ---
+    // ★ バブルと時刻を横並びに
+    bubbleTime: {
+      flexDirection: 'row',
+      alignItems: 'flex-end', // ★ バブルと時刻の下端揃え
+      maxWidth: '90%',
+      gap: 6,
+    },
+
     bubble: {
-      maxWidth: '75%',
       paddingHorizontal: theme.spacing.md,
       paddingVertical: theme.spacing.sm,
       borderRadius: theme.borderRadius.lg,
+      maxWidth: '92%', // ← 改行改善
     },
     ownBubble: {
       backgroundColor: theme.colors.accent,
@@ -163,46 +124,24 @@ const createStyles = (theme: Theme) =>
       backgroundColor: theme.colors.cardBackground,
       borderBottomLeftRadius: 4,
     },
-    messageText: {
+
+    text: {
       fontSize: theme.fontSize.md,
       color: theme.colors.textPrimary,
       lineHeight: 20,
     },
-    ownMessageText: {
+    ownText: {
       color: theme.colors.secondary,
     },
 
-    // --- バブル＋時刻 ブロック ---
-    messageBlockOwn: {
-      maxWidth: '80%',
-      alignItems: 'flex-end',
-      marginRight: theme.spacing.xs,
-    },
-    messageBlockOther: {
-      maxWidth: '80%',
-      alignItems: 'flex-start',
-      marginLeft: theme.spacing.xs,
-    },
-
-    bubbleTimeRowOwn: {
-      flexDirection: 'row', // 時刻 → バブル（右側）
-      alignItems: 'flex-end',
-      gap: theme.spacing.xs,
-    },
-    bubbleTimeRowOther: {
-      flexDirection: 'row', // バブル → 時刻（左側）
-      alignItems: 'flex-end',
-      gap: theme.spacing.xs,
-    },
-
-    // --- 時刻 ---
-    timestamp: {
+    time: {
       fontSize: theme.fontSize.xs,
+      marginBottom: 2,
     },
-    timestampOwn: {
+    timeOwn: {
       color: `${theme.colors.secondary}CC`,
     },
-    timestampOther: {
+    timeOther: {
       color: `${theme.colors.textSecondary}CC`,
     },
   });

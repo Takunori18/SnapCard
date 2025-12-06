@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
-import { ensureSkiaWeb } from '../web-shims/skia.web';
+import { ensureSkiaWeb } from '../web-shims/ensureSkiaWeb';
 
 type SkiaWebState = {
   ready: boolean;
@@ -39,4 +39,3 @@ export const useSkiaWebReady = (): SkiaWebState => {
 
   return state;
 };
-

@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Alert,
   Dimensions,
-  ScrollView,
   StatusBar,
   ActivityIndicator,
   TextInput,
@@ -22,14 +21,18 @@ import { CardSidebar } from './components/CardSidebar';
 import { CardPropertyPanel } from './components/CardPropertyPanel';
 import { CardLayerPanel } from './components/CardLayerPanel';
 import { CardToolbar } from './components/CardToolbar';
-import { exportToImage, uploadToSupabase, generateThumbnail } from '../../utils/exportUtils';
+import {
+  exportToImage,
+  uploadToSupabase,
+  generateThumbnail,
+} from '../../utils/exportUtils';
 import { useSnapCardContext } from '../../contexts/SnapCardContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSkiaWebReady } from '../../hooks/useSkiaWebReady';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-type ViewMode = 'edit' | 'layers' | 'export';
+type ViewMode = 'edit' | 'layers';
 
 export const CardEditorScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -56,7 +59,6 @@ export const CardEditorScreen: React.FC = () => {
 
   const [viewMode, setViewMode] = useState<ViewMode>('edit');
   const [saving, setSaving] = useState(false);
-  const [showGrid, setShowGrid] = useState(false);
   const [location, setLocation] = useState('');
   const { ready: skiaReady, error: skiaError } = useSkiaWebReady();
 
@@ -66,18 +68,23 @@ export const CardEditorScreen: React.FC = () => {
   // 初期化
   useEffect(() => {
     setMode('card');
+    const fitZoom = Math.min(
+      SCREEN_WIDTH / 1200,
+      (SCREEN_HEIGHT - 200) / 1200
+    );
+
     setCanvas({
       width: 1200,
       height: 1200,
       backgroundColor: '#FFFFFF',
-      zoom: Math.min(SCREEN_WIDTH / 1200, (SCREEN_HEIGHT - 200) / 1200),
+      zoom: fitZoom,
       pan: { x: 0, y: 0 },
     });
 
     return () => {
       reset();
     };
-  }, []);
+  }, [setMode, setCanvas, reset]);
 
   const handleZoomIn = useCallback(() => {
     setZoom(Math.min(canvas.zoom + 0.1, 3));
@@ -88,7 +95,10 @@ export const CardEditorScreen: React.FC = () => {
   }, [canvas.zoom, setZoom]);
 
   const handleZoomReset = useCallback(() => {
-    const fitZoom = Math.min(SCREEN_WIDTH / 1200, (SCREEN_HEIGHT - 200) / 1200);
+    const fitZoom = Math.min(
+      SCREEN_WIDTH / 1200,
+      (SCREEN_HEIGHT - 200) / 1200
+    );
     setZoom(fitZoom);
   }, [setZoom]);
 
@@ -102,7 +112,7 @@ export const CardEditorScreen: React.FC = () => {
       setSaving(true);
 
       const snapshot = getSnapshot();
-      
+
       // 高解像度画像
       const localUri = await exportToImage(snapshot, 'jpg', {
         quality: 0.95,
@@ -161,12 +171,19 @@ export const CardEditorScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" />
-      
+
       {/* ヘッダー */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
-            <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.headerButton}
+          >
+            <Ionicons
+              name="arrow-back"
+              size={24}
+              color={theme.colors.textPrimary}
+            />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>カードエディター</Text>
         </View>
@@ -180,7 +197,11 @@ export const CardEditorScreen: React.FC = () => {
             <Ionicons
               name="arrow-undo"
               size={20}
-              color={canUndo ? theme.colors.textPrimary : theme.colors.textTertiary}
+              color={
+                canUndo
+                  ? theme.colors.textPrimary
+                  : theme.colors.textTertiary
+              }
             />
           </TouchableOpacity>
 
@@ -192,31 +213,57 @@ export const CardEditorScreen: React.FC = () => {
             <Ionicons
               name="arrow-redo"
               size={20}
-              color={canRedo ? theme.colors.textPrimary : theme.colors.textTertiary}
+              color={
+                canRedo
+                  ? theme.colors.textPrimary
+                  : theme.colors.textTertiary
+              }
             />
           </TouchableOpacity>
 
           <View style={styles.divider} />
 
           <TouchableOpacity onPress={handleZoomOut} style={styles.iconButton}>
-            <Ionicons name="remove" size={20} color={theme.colors.textPrimary} />
+            <Ionicons
+              name="remove"
+              size={20}
+              color={theme.colors.textPrimary}
+            />
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={handleZoomReset} style={styles.zoomDisplay}>
-            <Text style={styles.zoomText}>{Math.round(canvas.zoom * 100)}%</Text>
+          <TouchableOpacity
+            onPress={handleZoomReset}
+            style={styles.zoomDisplay}
+          >
+            <Text style={styles.zoomText}>
+              {Math.round(canvas.zoom * 100)}%
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity onPress={handleZoomIn} style={styles.iconButton}>
-            <Ionicons name="add" size={20} color={theme.colors.textPrimary} />
+            <Ionicons
+              name="add"
+              size={20}
+              color={theme.colors.textPrimary}
+            />
           </TouchableOpacity>
         </View>
 
         <View style={styles.headerRight}>
           <TouchableOpacity
-            onPress={() => setViewMode(viewMode === 'layers' ? 'edit' : 'layers')}
-            style={[styles.iconButton, viewMode === 'layers' && styles.iconButtonActive]}
+            onPress={() =>
+              setViewMode(viewMode === 'layers' ? 'edit' : 'layers')
+            }
+            style={[
+              styles.iconButton,
+              viewMode === 'layers' && styles.iconButtonActive,
+            ]}
           >
-            <Ionicons name="layers-outline" size={20} color={theme.colors.textPrimary} />
+            <Ionicons
+              name="layers-outline"
+              size={20}
+              color={theme.colors.textPrimary}
+            />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -224,71 +271,82 @@ export const CardEditorScreen: React.FC = () => {
             disabled={saving}
             style={styles.saveButton}
           >
-            <Text style={styles.saveButtonText}>{saving ? '保存中...' : '保存'}</Text>
+            <Text style={styles.saveButtonText}>
+              {saving ? '保存中...' : '保存'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
 
       {/* メインコンテンツ */}
       <View style={styles.mainContent}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* ツールバー */}
-          <CardToolbar />
-          <View style={styles.locationSection}>
-            <Text style={styles.locationLabel}>位置情報</Text>
-            <View style={styles.locationInputRow}>
-              <Ionicons name="location-outline" size={20} color={theme.colors.textSecondary} />
-              <TextInput
-                style={styles.locationInput}
-                placeholder="カードの場所を入力"
-                placeholderTextColor={theme.colors.textTertiary}
-                value={location}
-                onChangeText={setLocation}
-                returnKeyType="done"
-              />
+        <View style={styles.editorRow}>
+          <CardSidebar />
+
+          <View style={styles.canvasColumn}>
+            <CardToolbar />
+
+            <View style={styles.locationSection}>
+              <Text style={styles.locationLabel}>位置情報</Text>
+              <View style={styles.locationInputRow}>
+                <Ionicons
+                  name="location-outline"
+                  size={20}
+                  color={theme.colors.textSecondary}
+                />
+                <TextInput
+                  style={styles.locationInput}
+                  placeholder="カードの場所を入力"
+                  placeholderTextColor={theme.colors.textTertiary}
+                  value={location}
+                  onChangeText={setLocation}
+                  returnKeyType="done"
+                />
+              </View>
+            </View>
+
+            <View style={styles.canvasWrapper}>
+              {!skiaReady ? (
+                <View style={styles.skiaPlaceholder}>
+                  {skiaError ? (
+                    <Text style={styles.skiaError}>
+                      Skia の初期化に失敗しました。アプリを再起動してください。
+                    </Text>
+                  ) : (
+                    <ActivityIndicator
+                      size="large"
+                      color={theme.colors.accent}
+                    />
+                  )}
+                </View>
+              ) : (
+                <SkiaCanvas
+                  width={canvasSize.width}
+                  height={canvasSize.height}
+                  onElementSelect={(id) => console.log('Selected:', id)}
+                />
+              )}
             </View>
           </View>
 
-          {/* キャンバス */}
-          <View style={styles.canvasWrapper}>
-            {!skiaReady ? (
-              <View style={styles.skiaPlaceholder}>
-                {skiaError ? (
-                  <Text style={styles.skiaError}>Skia の初期化に失敗しました。アプリを再起動してください。</Text>
-                ) : (
-                  <ActivityIndicator size="large" color={theme.colors.accent} />
-                )}
-              </View>
+          <View style={styles.propertyColumn}>
+            {viewMode === 'layers' ? (
+              <CardLayerPanel onClose={() => setViewMode('edit')} />
+            ) : selection.selectedIds.length > 0 ? (
+              <CardPropertyPanel />
             ) : (
-              <SkiaCanvas
-                width={canvasSize.width}
-                height={canvasSize.height}
-                onElementSelect={(id) => console.log('Selected:', id)}
-              />
+              <View style={styles.propertyPlaceholder}>
+                <Text style={styles.propertyPlaceholderText}>
+                  オブジェクトを選択すると詳細プロパティが表示されます。
+                </Text>
+                <Text style={styles.propertyPlaceholderSubtext}>
+                  テキスト・図形・画像をタップして位置や回転を変更できます。
+                </Text>
+              </View>
             )}
           </View>
-
-          {/* サイドバー（モバイル用は下部に配置） */}
-          <CardSidebar />
-        </ScrollView>
+        </View>
       </View>
-
-      {/* レイヤーパネル（モーダル） */}
-      {viewMode === 'layers' && (
-        <View style={styles.layerPanelOverlay}>
-          <CardLayerPanel onClose={() => setViewMode('edit')} />
-        </View>
-      )}
-
-      {/* プロパティパネル（選択時のみ） */}
-      {selection.selectedIds.length > 0 && viewMode === 'edit' && (
-        <View style={styles.propertyPanelOverlay}>
-          <CardPropertyPanel />
-        </View>
-      )}
     </SafeAreaView>
   );
 };
@@ -381,10 +439,7 @@ const createStyles = (theme: Theme) =>
     },
     mainContent: {
       flex: 1,
-    },
-    scrollContent: {
       padding: theme.spacing.md,
-      alignItems: 'center',
     },
     canvasWrapper: {
       marginVertical: theme.spacing.md,
@@ -395,6 +450,8 @@ const createStyles = (theme: Theme) =>
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.1,
       shadowRadius: 8,
+      width: '100%',
+      aspectRatio: 1,
     },
     locationSection: {
       width: '100%',
@@ -426,8 +483,7 @@ const createStyles = (theme: Theme) =>
       minHeight: 44,
     },
     skiaPlaceholder: {
-      width: '100%',
-      height: '100%',
+      flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
       padding: theme.spacing.lg,
@@ -437,33 +493,39 @@ const createStyles = (theme: Theme) =>
       color: theme.colors.error,
       textAlign: 'center',
     },
-    layerPanelOverlay: {
-      position: 'absolute',
-      top: 0,
-      right: 0,
-      bottom: 0,
-      width: '80%',
-      maxWidth: 320,
-      backgroundColor: theme.colors.secondary,
-      elevation: 10,
-      shadowColor: '#000',
-      shadowOffset: { width: -2, height: 0 },
-      shadowOpacity: 0.2,
-      shadowRadius: 8,
+    editorRow: {
+      flexDirection: 'row',
+      width: '100%',
+      gap: theme.spacing.md,
+      alignItems: 'flex-start',
+      flexWrap: 'wrap',
+      justifyContent: 'center',
     },
-    propertyPanelOverlay: {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      maxHeight: '50%',
+    canvasColumn: {
+      flex: 2,
+      gap: theme.spacing.md,
+      alignItems: 'center',
+    },
+    propertyColumn: {
+      width: 280,
+    },
+    propertyPlaceholder: {
+      padding: theme.spacing.md,
+      borderRadius: theme.borderRadius.lg,
       backgroundColor: theme.colors.secondary,
-      borderTopLeftRadius: theme.borderRadius.xl,
-      borderTopRightRadius: theme.borderRadius.xl,
-      elevation: 10,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: -2 },
-      shadowOpacity: 0.2,
-      shadowRadius: 8,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    propertyPlaceholderText: {
+      fontSize: theme.fontSize.md,
+      fontWeight: theme.fontWeight.semibold,
+      color: theme.colors.textSecondary,
+      marginBottom: theme.spacing.xs,
+    },
+    propertyPlaceholderSubtext: {
+      fontSize: theme.fontSize.sm,
+      color: theme.colors.textTertiary,
     },
   });
+
+export default CardEditorScreen;

@@ -489,12 +489,13 @@ const createStyles = (theme: Theme, gridGap: number, cardWidth: number, cardHeig
     },
     accountColumnWrapper: {
       paddingHorizontal: gridGap,
-      justifyContent: 'space-between',
+      justifyContent: 'flex-start',
     },
     gridItemTouchable: {
       width: cardWidth,
       height: cardHeight,
       marginBottom: gridGap,
+      marginRight: gridGap,
     },
     gridItemGradient: {
       width: '100%',
