@@ -1,10 +1,11 @@
 import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, Theme } from '../../theme';
 import { DmConversation } from '../../types/dm';
 import { format, isToday, isYesterday } from 'date-fns';
 import { ja } from 'date-fns/locale';
+import CardyImage from '../common/CardyImage';
 
 interface DmListItemProps {
   conversation: DmConversation;
@@ -36,10 +37,14 @@ const DmListItem: React.FC<DmListItemProps> = ({ conversation, onPress }) => {
   return (
     <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.avatarContainer}>
-        {otherUser.avatar_url ? (
-          <Image
+        {otherUser.avatar_url?.trim() ? (
+          <CardyImage
             source={{ uri: otherUser.avatar_url }}
             style={styles.avatar}
+            contentFit="cover"
+            alt={`${otherUser.display_name}のアイコン`}
+            width={50}
+            height={50}
           />
         ) : (
           <View style={styles.avatarPlaceholder}>

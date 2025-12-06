@@ -30,6 +30,11 @@ module.exports = async function (env, argv) {
     'expo-modules-core$': path.resolve(__dirname, 'src/web-shims/expo-modules-core-shim.js'),
   };
 
+  if (env.platform === 'web') {
+    config.resolve.alias['@shopify/react-native-skia'] =
+      require.resolve('@shopify/react-native-skia/lib/module/web');
+  }
+
   // WebAssemblyサポートを追加
   config.experiments = {
     ...config.experiments,
